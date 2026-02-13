@@ -1,0 +1,29 @@
+default:
+  optimizer: adam
+  trasform: None
+  # Continual learning
+  alpha: 0.1
+  lr: 0.0001
+  optimizer: adam
+  n_epochs: 10
+  batch_size: 5
+
+  # SRNN architecture
+  n_in: 1196
+  srnn_hidden_size: 100
+  n_out: 10
+  n_t: 30
+  thr: .6
+  tau_m: 2.0
+  tau_o: 0.02
+  b_o: 0.0
+  gamma: 0.03
+  dt: .1
+  classif: true
+neuro-mnist:
+  30:   # buffer_size
+    buffer_size: 30
+
+    
+
+

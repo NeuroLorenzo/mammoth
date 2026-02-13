@@ -145,13 +145,17 @@ def load_configs(parser: argparse.ArgumentParser, cmd: Optional[List[str]] = Non
     from utils.args import fix_model_parser_backwards_compatibility, get_single_arg_value
 
     cmd = cmd or sys.argv[1:]  # get the command line arguments, if not provided use sys.argv
-
+    print('cmd:', cmd)
     args = parser.parse_known_args(cmd)[0]
+    print('args:', args)
 
     # load the model configuration
     # - get the model parser and fix the get_parser function for backwards compatibility
     model_group_parser = parser.add_argument_group('Model-specific arguments')
+    print('model_group_parser:', model_group_parser)
     model_parser = get_model_class(args).get_parser(model_group_parser)
+    print('model_parser:', model_parser)
+    
     parser = fix_model_parser_backwards_compatibility(model_group_parser, model_parser)
     is_rehearsal = any([p for p in parser._actions if p.dest == 'buffer_size'])
     buffer_size = None
@@ -165,12 +169,15 @@ def load_configs(parser: argparse.ArgumentParser, cmd: Optional[List[str]] = Non
 
     # - get the defaults that were set with `set_defaults` in the parser
     base_config = parser._defaults.copy()
+    print('base_config:', base_config)
 
     # - get the configuration file for the model
     model_config = load_model_config(args, buffer_size=buffer_size)
+    print('model_config:', model_config)
 
     # update the dataset class with the configuration
     dataset_class = get_dataset_class(args)
+    print('dataset_class:', dataset_class)
 
     # load the dataset configuration. If the model specified a dataset config, use it. Otherwise, use the dataset configuration
     base_dataset_config = get_default_args_for_dataset(args.dataset)

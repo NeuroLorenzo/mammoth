@@ -1,14 +1,14 @@
-from utils import globals
-from models import get_model_names, register_model, ContinualModel
-from datasets import get_dataset_names, register_dataset
-from datasets.utils import set_default_from_args
-from datasets.utils.continual_dataset import ContinualDataset, store_masked_loaders
-from backbone import get_backbone_names, register_backbone, MammothBackbone, ReturnTypes
-from utils.notebooks import load_runner, get_avail_args
-from utils.training import train
-from utils.conf import base_path, get_device
-from utils.buffer import Buffer
-from utils.args import add_rehearsal_args
+from mammoth.utils import globals
+from mammoth.models import get_model_names, register_model, ContinualModel
+from mammoth.datasets import get_dataset_names, register_dataset
+from mammoth.datasets.utils import set_default_from_args
+from mammoth.datasets.utils.continual_dataset import ContinualDataset, store_masked_loaders
+from mammoth.backbone import get_backbone_names, register_backbone, MammothBackbone, ReturnTypes
+from mammoth.utils.notebooks import load_runner, get_avail_args
+from mammoth.utils.training import train
+from mammoth.utils.conf import base_path, get_device
+from mammoth.utils.buffer import Buffer
+from mammoth.utils.args import add_rehearsal_args
 
 __all__ = [
     "get_dataset_names",

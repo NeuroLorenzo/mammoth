@@ -9,3 +9,5 @@ onedrivedownloader
 ftfy
 regex
 pyyaml
+pandas
+googledrivedownloader==0.4
