@@ -31,15 +31,17 @@ class srnn(ContinualModel):
     def observe(self, inputs, labels, not_aug_inputs, epoch=None):
         
         self.net.eval()
+        _,T,_ = inputs.shape
         # Build targets exactly like before
         if self.args.classif:
-            targets = (
-                torch.zeros(labels.shape, device=self.device)
-                .unsqueeze(-1)
-                .expand(-1, -1, self.args.n_out)
-                .scatter(2, labels.unsqueeze(-1), 1.0)
-                .permute(1, 0, 2)
-            )
+            targets=F.one_hot(labels, num_classes=self.args.n_out).float().unsqueeze(0).expand(T, -1, -1)
+            # targets = (
+            #     torch.zeros(labels.shape, device=self.device)
+            #     .unsqueeze(-1)
+            #     .expand(-1, -1, self.args.n_out)
+            #     .scatter(2, labels.unsqueeze(-1), 1.0)
+            #     .permute(1, 0, 2)
+            # )
         else:
             targets = labels.permute(1, 0, 2)
 

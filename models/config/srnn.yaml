@@ -19,6 +19,8 @@ default:
   b_o: 0.0
   gamma: 0.03
   dt: .1
+  keep_sparsity: True
+  sparsity: [0.75,0.99,0.0]
   classif: true
 neuro-mnist:
   30:   # buffer_size

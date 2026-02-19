@@ -20,7 +20,7 @@ class BaseSRNN(MammothBackbone):
 
     
 
-    def __init__(self, n_in, n_rec, n_out, n_t, thr, tau_m, tau_o, b_o, gamma, dt, classif,model='LIF' , w_init_gain=(0.5,0.1,0.5), lr_layer=(0.05,0.05,1.0), t_crop=100, visualize=False, visualize_light=True) -> None:    
+    def __init__(self, n_in, n_rec, n_out, n_t, thr, tau_m, tau_o, b_o, gamma, dt, classif,keep_sparsity,sparsity,model='LIF' , w_init_gain=(0.5,0.1,0.5), lr_layer=(0.05,0.05,1.0), t_crop=100, visualize=False, visualize_light=True) -> None:    
         
         """
         Instantiates the layers of the network.
@@ -34,7 +34,8 @@ class BaseSRNN(MammothBackbone):
         self.load_traces=False
 
 
-
+        print('keep_sparsity',keep_sparsity)
+        print('sparsity',sparsity)
         self.n_in     = n_in
         self.n_rec    = n_rec
         self.n_out    = n_out
@@ -51,6 +52,7 @@ class BaseSRNN(MammothBackbone):
         self.t_crop   = t_crop  
         self.visu     = visualize
         self.visu_l   = visualize_light
+        self.keep_sparsity=keep_sparsity
         
         #Parameters
         self.w_in  = nn.Parameter(torch.Tensor(n_rec, n_in ))
@@ -58,7 +60,7 @@ class BaseSRNN(MammothBackbone):
         self.w_out = nn.Parameter(torch.Tensor(n_out, n_rec))
         self.reg_term = torch.zeros(self.n_rec).to(self.device)
         self.B_out = torch.Tensor(n_out, n_rec).to(self.device)
-        self.reset_parameters(w_init_gain)
+        self.reset_parameters(w_init_gain,sparsity)
         # Precompute the convolution kernels
         alpha_conv = torch.tensor([self.alpha ** (n_t - i - 1) for i in range(n_t)],
                                        dtype=torch.float32, device=self.device).view(1, 1, -1)
@@ -71,15 +73,52 @@ class BaseSRNN(MammothBackbone):
             plt.ion()
             self.fig, self.ax_list = plt.subplots(2+self.n_out+5, sharex=True)
 
+    def create_mask(self, shape, sparsity_level):
+        """
+        Generate a binary mask with the given sparsity level.
+        sparsity_level = fraction of weights set to zero.
+        """
+        print('sparsity level',sparsity_level)
+        return torch.tensor(
+            np.random.choice([0, 1], size=shape, p=[sparsity_level, 1 - sparsity_level]),
+            dtype=torch.float32
+        )
+    def apply_masks(self):
+        
+        # save masks for later use (important!)
+        self.mask_in = self.mask_in.to(self.w_in.device)
+        self.mask_rec = self.mask_rec.to(self.w_rec.device)
+        self.mask_out = self.mask_out.to(self.w_out.device)
+        with torch.no_grad():
+            self.w_in *= self.mask_in
+            self.w_rec *= self.mask_rec
+            self.w_out *= self.mask_out
 
-    def reset_parameters(self, gain) -> None:
+
+    def reset_parameters(self, gain,sparsity) -> None:
         
         torch.nn.init.kaiming_normal_(self.w_in)
         self.w_in.data = gain[0]*self.w_in.data
+        mask_in = self.create_mask(self.w_in.shape, sparsity[0])
+        self.w_in.data *= mask_in
+
         torch.nn.init.kaiming_normal_(self.w_rec)
         self.w_rec.data = gain[1]*self.w_rec.data
+        mask_rec = self.create_mask(self.w_rec.shape, sparsity[1])
+        self.w_rec.data *= mask_rec
+
         torch.nn.init.kaiming_normal_(self.w_out)
         self.w_out.data = gain[2]*self.w_out.data
+        mask_out = self.create_mask(self.w_out.shape, sparsity[2])
+        self.w_out.data *= mask_out
+
+        
+        # save masks for later use (important!)
+        self.mask_in = self.create_mask(self.w_in.shape, sparsity[0])
+        self.mask_rec = self.create_mask(self.w_rec.shape, sparsity[1])
+        self.mask_out = self.create_mask(self.w_out.shape, sparsity[2])
+        
+        self.apply_masks()
 
     def init_net(self, n_b, n_t, n_in, n_rec, n_out):
         # -------------------------
@@ -148,6 +187,11 @@ class BaseSRNN(MammothBackbone):
         # -------------------------
         if do_training and yt is not None:
             self.grads_batch(x, yo, yt)
+            if self.keep_sparsity:
+                    self.apply_masks()
+        
+        else:
+            return yo.mean(dim=0)
 
         if returnt == "out":
             return yo.permute(1,2,0)
@@ -174,7 +218,7 @@ class BaseSRNN(MammothBackbone):
         # Eligibility traces
         self.trace_in     = F.conv1d(   self.trace_in.reshape(B,self.n_in *self.n_rec,self.n_t), self.kappa_conv.expand(self.n_in *self.n_rec,-1,-1), padding=self.n_t, groups=self.n_in *self.n_rec)[:,:,1:self.n_t+1].reshape(B,self.n_rec,self.n_in ,self.n_t)   #B, n_rec, n_in , n_t  
         self.trace_rec    = F.conv1d(  self.trace_rec.reshape(B,self.n_rec*self.n_rec,self.n_t), self.kappa_conv.expand(self.n_rec*self.n_rec,-1,-1), padding=self.n_t, groups=self.n_rec*self.n_rec)[:,:,1:self.n_t+1].reshape(B,self.n_rec,self.n_rec,self.n_t)   #B, n_rec, n_rec, n_t
-        yt=np.tile(yt,T)
+        # yt = yt.unsqueeze(1).repeat(1, T, 1).permute(1, 0, 2)
         # Learning signals
         err = yo - yt
         L = torch.einsum('tbo,or->brt', err, self.w_out)
@@ -276,6 +320,8 @@ def srnn_spiking(
     gamma: float,
     dt: float,
     classif: bool,
+    keep_sparsity: bool,
+    sparsity: tuple,
     ) -> BaseSRNN:
 
         return BaseSRNN(
@@ -290,4 +336,6 @@ def srnn_spiking(
             gamma=gamma,
             dt=dt,
             classif=classif,
+            keep_sparsity=keep_sparsity,
+            sparsity=sparsity,
         )

@@ -478,7 +478,7 @@ def store_masked_loaders(train_dataset: Dataset, test_dataset: Dataset,
 
     # Split the dataset into tasks
     if 'class-il' in setting.SETTING or 'task-il' in setting.SETTING:
-        print('targetssss:',train_dataset.targets.shape,train_dataset.targets)
+        # print('targetssss:',train_dataset.targets.shape,train_dataset.targets)
         if hasattr(train_dataset, 'task_ids'):
             if not isinstance(test_dataset.task_ids, np.ndarray):
                 test_dataset.task_ids = np.array(test_dataset.task_ids)
@@ -507,7 +507,7 @@ def store_masked_loaders(train_dataset: Dataset, test_dataset: Dataset,
                                            test_dataset.targets < end_c)
             else:
                 raise ValueError('Unknown validation mode: {}'.format(setting.args.validation_mode))
-        print('test_dataset.data ',test_dataset.data.shape,train_dataset.data)
+        # print('test_dataset.data ',test_dataset.data.shape,train_dataset.data)
         test_dataset.data = test_dataset.data[test_mask]
         test_dataset.targets = test_dataset.targets[test_mask]
         test_dataset.indexes = test_dataset.indexes[test_mask]

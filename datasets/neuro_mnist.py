@@ -59,6 +59,10 @@ class NMNIST(VisionDataset):
         # self.targets = np.array(self.targets)
         self.indexes = np.arange(len(self.targets))
     
+    # @property
+    # def indexes(self):
+    #     return np.arange(self.data.shape[0])
+    
     def _load_data(self):
                 return [self.load_image(path, self.pixels_dict) for path in self.sample_paths]
     
@@ -77,7 +81,8 @@ class NMNIST(VisionDataset):
         return sample_paths, targets
     
     def __len__(self):
-        return len(self.sample_paths)
+        # return len(self.sample_paths)
+        return len(self.data)
     
     def __getitem__(self, index):
         if torch.is_tensor(index):
@@ -97,7 +102,7 @@ class NMNIST(VisionDataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
         else:
-            target = torch.tensor(target).long()   # scalar class label
+            target.long()   # scalar class label
 
         return img, target, img
     
