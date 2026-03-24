@@ -214,7 +214,8 @@ class ContinualDataset(object):
             task_order = self.args.custom_task_order.split(',') if ',' in self.args.custom_task_order else self.args.custom_task_order.split('-')
             assert len(task_order) == self.N_TASKS, 'The custom task order must have the same number of tasks as the dataset but got {} for {} tasks'.format(len(task_order), self.N_TASKS)
 
-            task_class = [list(range(self.get_offsets(int(task_order[i])))) for i in range(self.N_TASKS)]
+            # task_class = [list(range(*self.get_offsets(int(task_order[i])))) for i in range(self.N_TASKS)]
+            task_class = [list(range(self.get_offsets(int(task_order[i])))) for i in range(self.N_TASKS)] ## $$ this fails because get_offsets returns a tuple (start,from)
 
             self.args.class_order = task_class
             logging.info('Will use the custom task order: {}'.format(self.args.custom_task_order))

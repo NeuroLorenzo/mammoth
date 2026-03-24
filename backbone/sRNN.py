@@ -20,7 +20,7 @@ class BaseSRNN(MammothBackbone):
 
     
 
-    def __init__(self, n_in, n_rec, n_out, n_t, thr, tau_m, tau_o, b_o, gamma, dt, classif,keep_sparsity,sparsity,model='LIF' , w_init_gain=(0.5,0.1,0.5), lr_layer=(0.05,0.05,1.0), t_crop=100, visualize=False, visualize_light=True) -> None:    
+    def __init__(self, n_in, n_rec, n_out, n_t, thr, tau_m, tau_o, b_o, gamma, dt, classif,keep_sparsity,sparsity,model='LIF' , w_init_gain=(0.5,0.1,0.5), lr_layer=(0.05,0.05,0.05), t_crop=100, visualize=False, visualize_light=True) -> None:    
         
         """
         Instantiates the layers of the network.
@@ -34,8 +34,6 @@ class BaseSRNN(MammothBackbone):
         self.load_traces=False
 
 
-        print('keep_sparsity',keep_sparsity)
-        print('sparsity',sparsity)
         self.n_in     = n_in
         self.n_rec    = n_rec
         self.n_out    = n_out
@@ -48,12 +46,14 @@ class BaseSRNN(MammothBackbone):
         self.b_o      = b_o
         self.model    = model
         self.classif  = classif
-        self.lr_layer = lr_layer
+        self.lr_layer = (0.005,0.005,0.005)
+        # self.lr_layer = lr_layer
         self.t_crop   = t_crop  
         self.visu     = visualize
+        self.visu_count    = 0
         self.visu_l   = visualize_light
         self.keep_sparsity=keep_sparsity
-        
+        self.fire_sparsities=[]
         #Parameters
         self.w_in  = nn.Parameter(torch.Tensor(n_rec, n_in ))
         self.w_rec = nn.Parameter(torch.Tensor(n_rec, n_rec))
@@ -78,7 +78,7 @@ class BaseSRNN(MammothBackbone):
         Generate a binary mask with the given sparsity level.
         sparsity_level = fraction of weights set to zero.
         """
-        print('sparsity level',sparsity_level)
+        # print('sparsity level',sparsity_level)
         return torch.tensor(
             np.random.choice([0, 1], size=shape, p=[sparsity_level, 1 - sparsity_level]),
             dtype=torch.float32
@@ -99,18 +99,18 @@ class BaseSRNN(MammothBackbone):
         
         torch.nn.init.kaiming_normal_(self.w_in)
         self.w_in.data = gain[0]*self.w_in.data
-        mask_in = self.create_mask(self.w_in.shape, sparsity[0])
-        self.w_in.data *= mask_in
+        # mask_in = self.create_mask(self.w_in.shape, sparsity[0])
+        # self.w_in.data *= mask_in
 
         torch.nn.init.kaiming_normal_(self.w_rec)
         self.w_rec.data = gain[1]*self.w_rec.data
-        mask_rec = self.create_mask(self.w_rec.shape, sparsity[1])
-        self.w_rec.data *= mask_rec
+        _rec = self.create_mask(self.w_rec.shape, sparsity[1])
+        # self.w_rec.data *= mask_rec
 
         torch.nn.init.kaiming_normal_(self.w_out)
         self.w_out.data = gain[2]*self.w_out.data
-        mask_out = self.create_mask(self.w_out.shape, sparsity[2])
-        self.w_out.data *= mask_out
+        # mask_out = self.create_mask(self.w_out.shape, sparsity[2])
+        # self.w_out.data *= mask_out
 
         
         # save masks for later use (important!)
@@ -153,8 +153,10 @@ class BaseSRNN(MammothBackbone):
         x: (B, T, n_in) 
         yt: (T, B, n_out) or None
         """
-        B,T,_ = x.shape
-        assert T == self.n_t
+        if self.keep_sparsity:
+            self.apply_masks()
+        B,T,N = x.shape
+        assert T == self.n_t, f"Temporal Consistency Error: data len T ({T}) different from the simulation times n_t ({self.n_t})"
 
         self.init_net(B, T, self.n_in, self.n_rec, self.n_out)    # Network reset
          
@@ -176,70 +178,100 @@ class BaseSRNN(MammothBackbone):
                 + self.z[t+1] @ self.w_out.T
                 + self.b_o
             )
-
+        fire_sparsity=torch.count_nonzero(self.z)/(T*B*N)
+        self.fire_sparsities.append(100 -100*fire_sparsity.cpu())
+        
+        
         if self.classif:
             yo = F.softmax(self.vo, dim=2)
         else:
             yo = self.vo
 
-        # -------------------------
-        # Custom learning rule
-        # -------------------------
-        if do_training and yt is not None:
-            self.grads_batch(x, yo, yt)
-            if self.keep_sparsity:
-                    self.apply_masks()
-        
-        else:
+        if yt is None:
+            print('output values:',self.vo[-1,:,:])
+            
+            return F.softmax(self.vo[-1,:,:], dim=1)
+            return F.softmax(self.vo.mean(dim=0), dim=1)
             return yo.mean(dim=0)
 
+        
+        
         if returnt == "out":
+            # return yo
             return yo.permute(1,2,0)
         elif returnt == "full":
             return yo, self.z, self.v
         else:
             raise NotImplementedError
 
-    def grads_batch(self, x, yo, yt):   
-        # Surrogate derivatives
-        h = self.gamma*torch.max(torch.zeros_like(self.v), 1-torch.abs((self.v-self.thr)/self.thr))
-        B,T,_=x.shape
-        # Input and recurrent eligibility vectors for the 'LIF' model (vectorized computation, model-dependent)
-        assert self.model == "LIF", "Nice try, but model " + self.model + " is not supported. ;-)"
-        self.trace_in    = F.conv1d(     x.permute(0,2,1), self.alpha_conv.expand(self.n_in ,-1,-1), padding=self.n_t, groups=self.n_in )[:,:,1:self.n_t+1].unsqueeze(1).expand(-1,self.n_rec,-1,-1)  #B, n_rec, n_in , n_t 
-        self.trace_in    = torch.einsum('tbr,brit->brit', h, self.trace_in )                                                                                                                          #B, n_rec, n_in , n_t 
-        self.trace_rec   = F.conv1d(self.z.permute(1,2,0), self.alpha_conv.expand(self.n_rec,-1,-1), padding=self.n_t, groups=self.n_rec)[:,:, :self.n_t  ].unsqueeze(1).expand(-1,self.n_rec,-1,-1)  #B, n_rec, n_rec, n_t
-        self.trace_rec   = torch.einsum('tbr,brit->brit', h, self.trace_rec)                                                                                                                          #B, n_rec, n_rec, n_t    
-        self.trace_reg   = self.trace_rec
+    def grads_batch(self, x, yo, yt,start_id,end_id,loss=None,penalties=None):   
+        with torch.no_grad():
+            # Surrogate derivatives
+            h = self.gamma*torch.max(torch.zeros_like(self.v), 1-torch.abs((self.v-self.thr)/self.thr))
+            B,T,_=x.shape
+            # Input and recurrent eligibility vectors for the 'LIF' model (vectorized computation, model-dependent)
+            assert self.model == "LIF", "Nice try, but model " + self.model + " is not supported. ;-)"
+            self.trace_in    = F.conv1d(     x.permute(0,2,1), self.alpha_conv.expand(self.n_in ,-1,-1), padding=self.n_t, groups=self.n_in )[:,:,1:self.n_t+1].unsqueeze(1).expand(-1,self.n_rec,-1,-1)  #B, n_rec, n_in , n_t 
+            self.trace_in    = torch.einsum('tbr,brit->brit', h, self.trace_in )                                                                                                                          #B, n_rec, n_in , n_t 
+            self.trace_rec   = F.conv1d(self.z.permute(1,2,0), self.alpha_conv.expand(self.n_rec,-1,-1), padding=self.n_t, groups=self.n_rec)[:,:, :self.n_t  ].unsqueeze(1).expand(-1,self.n_rec,-1,-1)  #B, n_rec, n_rec, n_t
+            self.trace_rec   = torch.einsum('tbr,brit->brit', h, self.trace_rec)                                                                                                                          #B, n_rec, n_rec, n_t    
+            self.trace_reg   = self.trace_rec
 
-        # Output eligibility vector (vectorized computation, model-dependent)
-        self.trace_out  = F.conv1d(self.z.permute(1,2,0), self.kappa_conv.expand(self.n_rec,-1,-1), padding=self.n_t, groups=self.n_rec)[:,:,1:self.n_t+1]  #B, n_rec, n_t
+            # Output eligibility vector (vectorized computation, model-dependent)
+            self.trace_out  = F.conv1d(self.z.permute(1,2,0), self.kappa_conv.expand(self.n_rec,-1,-1), padding=self.n_t, groups=self.n_rec)[:,:,1:self.n_t+1]  #B, n_rec, n_t
 
-        # Eligibility traces
-        self.trace_in     = F.conv1d(   self.trace_in.reshape(B,self.n_in *self.n_rec,self.n_t), self.kappa_conv.expand(self.n_in *self.n_rec,-1,-1), padding=self.n_t, groups=self.n_in *self.n_rec)[:,:,1:self.n_t+1].reshape(B,self.n_rec,self.n_in ,self.n_t)   #B, n_rec, n_in , n_t  
-        self.trace_rec    = F.conv1d(  self.trace_rec.reshape(B,self.n_rec*self.n_rec,self.n_t), self.kappa_conv.expand(self.n_rec*self.n_rec,-1,-1), padding=self.n_t, groups=self.n_rec*self.n_rec)[:,:,1:self.n_t+1].reshape(B,self.n_rec,self.n_rec,self.n_t)   #B, n_rec, n_rec, n_t
-        # yt = yt.unsqueeze(1).repeat(1, T, 1).permute(1, 0, 2)
-        # Learning signals
-        err = yo - yt
-        L = torch.einsum('tbo,or->brt', err, self.w_out)
-        
-        # Update network visualization
-        if self.visu:
-            self.update_plot(x, self.z, yo, yt, L, self.trace_reg, self.trace_in,self.trace_rec, self.trace_out)
-        
-        # Compute network updates taking only the timesteps where the target is present
-        if self.t_crop != 0:
-            L         =          L[:,:,-self.t_crop:]
-            err       =        err[-self.t_crop:,:,:]
-            self.trace_in  =   self.trace_in[:,:,:,-self.t_crop:]
-            self.trace_rec =  self.trace_rec[:,:,:,-self.t_crop:]
-            self.trace_out =  self.trace_out[:,:,-self.t_crop:]
-        
-        # Weight gradient updates
-        self.w_in.grad  += self.lr_layer[0]*torch.sum(L.unsqueeze(2).expand(-1,-1,self.n_in ,-1) * self.trace_in , dim=(0,3)) 
-        self.w_rec.grad += self.lr_layer[1]*torch.sum(L.unsqueeze(2).expand(-1,-1,self.n_rec,-1) * self.trace_rec, dim=(0,3))
-        self.w_out.grad += self.lr_layer[2]*torch.einsum('tbo,brt->or', err, self.trace_out)
-    
+            # Eligibility traces
+            self.trace_in     = F.conv1d(   self.trace_in.reshape(B,self.n_in *self.n_rec,self.n_t), self.kappa_conv.expand(self.n_in *self.n_rec,-1,-1), padding=self.n_t, groups=self.n_in *self.n_rec)[:,:,1:self.n_t+1].reshape(B,self.n_rec,self.n_in ,self.n_t)   #B, n_rec, n_in , n_t  
+            self.trace_rec    = F.conv1d(  self.trace_rec.reshape(B,self.n_rec*self.n_rec,self.n_t), self.kappa_conv.expand(self.n_rec*self.n_rec,-1,-1), padding=self.n_t, groups=self.n_rec*self.n_rec)[:,:,1:self.n_t+1].reshape(B,self.n_rec,self.n_rec,self.n_t)   #B, n_rec, n_rec, n_t
+            # yt = yt.unsqueeze(1).repeat(1, T, 1).permute(1, 0, 2)
+            # Learning signals
+            T=5
+            err = yo - yt
+            # if loss:
+                # err_ce = loss(yo,yt)
+                # print('yo-yt: ',err,'; CE: ',err_ce)
+            # err=err[:,:,start_id:end_id]
+            
+            L = torch.einsum('tbo,or->brt', err, self.w_out[start_id:end_id,:])
+            
+
+            # Update network visualization
+            self.visu_count+=1
+            if self.visu_count%1000 ==0 :
+                print('uuuuuuuuuu save!---------------------------------------')
+                visual_data = {
+                        "input_spikes": x, # [T, 2, 34, 34]
+                        "z_states": self.z,        # [T, 100]
+                        "vo_states": yo,        # [T, 100]
+                        "t_in":self.trace_in,
+                        "t_rec":self.trace_rec,
+                        "t_out":self.trace_out,
+                        "w_in":self.w_in.data,
+                        "w_rec":self.w_rec.data,
+                        "w_out":self.w_out.data,
+                    }
+                torch.save(visual_data, f'sim_output_{self.visu_count}.pt')
+                # self.update_plot(x, self.z, yo, yt, L, self.trace_reg, self.trace_in,self.trace_rec, self.trace_out)
+            
+            # Compute network updates taking only the timesteps where the target is present
+            # if self.t_crop != 0:
+            #     L         =          L[:,:,-self.t_crop:]
+            #     err       =        err[-self.t_crop:,:,:]
+            #     self.trace_in  =   self.trace_in[:,:,:,-self.t_crop:]
+            #     self.trace_rec =  self.trace_rec[:,:,:,-self.t_crop:]
+            #     self.trace_out =  self.trace_out[:,:,-self.t_crop:]
+            
+            # Weight gradient updates
+            self.w_in.grad  += self.lr_layer[0]*torch.sum(L.unsqueeze(2).expand(-1,-1,self.n_in ,-1) * self.trace_in , dim=(0,3)) 
+            self.w_rec.grad += self.lr_layer[1]*torch.sum(L.unsqueeze(2).expand(-1,-1,self.n_rec,-1) * self.trace_rec, dim=(0,3))
+            self.w_out.grad[start_id:end_id,:] += self.lr_layer[2]*torch.einsum('tbo,brt->or', err, self.trace_out)
+            if penalties:
+                self.w_in.grad+=penalties['w_in']
+                self.w_rec.grad+=penalties['w_rec']
+                # self.w_out.grad+=penalties['w_out']+0.1*self.w_out.data
+                self.w_out.grad[start_id:end_id,:]+=penalties['w_out'][start_id:end_id,:] +0.1*self.w_out.data[start_id:end_id,:]
+                # self.w_out.grad+=0.001*self.w_out.data #L2 regularization
+            
     def update_plot(self, x, z, yo, yt, L, trace_reg, trace_in, trace_rec, trace_out):
         """Adapted from the original TensorFlow e-prop implemation from TU Graz, available at https://github.com/IGITUGraz/eligibility_propagation"""
     

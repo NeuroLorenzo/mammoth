@@ -306,6 +306,9 @@ def train(model: ContinualModel, dataset: ContinualDataset,
 
             accs = eval_dataset.evaluate(model, eval_dataset)
 
+            # all_labels=[lab for lab in dataset.test_loaders[0]]
+            # all_labels=torch.cat(all_labels)
+            # labs,counts=torch.unique(all_labels,return_counts=True)
             if args.eval_future and cur_task < dataset.N_TASKS - 1:
                 transf_accs = accs[0][cur_task + 1:], accs[1][cur_task + 1:]
                 accs = accs[0][:cur_task + 1], accs[1][:cur_task + 1]

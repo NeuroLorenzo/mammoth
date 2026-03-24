@@ -72,6 +72,7 @@ def evaluate(model: 'ContinualModel', dataset: 'ContinualDataset', last=False, r
             if model.args.debug_mode and i > model.get_debug_iters():
                 break
             inputs, labels = data[0], data[1]
+            # print('labels',labels)
             inputs, labels = inputs.to(model.device), labels.to(model.device)
             if 'class-il' not in model.COMPATIBILITY and 'general-continual' not in model.COMPATIBILITY:
                 outputs = model(inputs, k)
@@ -80,6 +81,7 @@ def evaluate(model: 'ContinualModel', dataset: 'ContinualDataset', last=False, r
                     outputs = model.future_forward(inputs)
                 else:
                     outputs = model(inputs)
+                    print('labels:',labels)
 
             if return_loss:
                 loss = loss_fn(outputs, labels)

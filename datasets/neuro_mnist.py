@@ -23,7 +23,7 @@ class NMNIST(VisionDataset):
     """
 
     def __init__(self, root, transform=None, train=True,
-                 target_transform=None, download=False) -> None:
+                 target_transform=None, download=False,dt=1.,seq_len=300) -> None:
         # Call parent constructor
         super().__init__(root=root, transform=transform, target_transform=target_transform)
         
@@ -48,14 +48,14 @@ class NMNIST(VisionDataset):
         self.download = download
         self.transform = transform
         self.n_out=10 # number of targets
-        self.dt=0.1 # size of integration timestep
-        self.seq_len=30 # number of integration timesteps ($check if it's time o #timesteps=time/dt) 
+        self.dt=dt # size of integration timestep
+        self.seq_len=seq_len # number of integration timesteps ($check if it's time o #timesteps=time/dt) 
         # self.seq_len=300
         self.sample_paths, self.targets = self._get_all_sample_paths_with_labels()
         self.active_indices = {p: i for i, p in enumerate(self.pixels_dict["active"])}
 
-        self.data = self._load_data()
-        self.data = np.stack(self._load_data(), axis=0)
+        data = self._load_data()
+        self.data = np.stack(data, axis=0)
         # self.targets = np.array(self.targets)
         self.indexes = np.arange(len(self.targets))
     
@@ -64,8 +64,19 @@ class NMNIST(VisionDataset):
     #     return np.arange(self.data.shape[0])
     
     def _load_data(self):
-                return [self.load_image(path, self.pixels_dict) for path in self.sample_paths]
-    
+        if not self.sample_paths:
+            return []
+        
+        # Controllo sul primo elemento per decidere la strategia
+        if self.sample_paths[0].endswith('.bin'):
+            print(f"INFO: Caricamento lento da .bin ({len(self.sample_paths)} campioni)")
+            return [self.load_image(path, self.pixels_dict) for path in self.sample_paths]
+        else: 
+            print(f"INFO: Caricamento rapido da .pt ({len(self.sample_paths)} campioni)")
+            for path in self.sample_paths:
+                torch.load(path)
+            return [torch.load(path) for path in self.sample_paths]
+
     def _get_all_sample_paths_with_labels(self):
         sample_paths = []
         targets = []
@@ -185,20 +196,24 @@ class NeuromorphicMNIST(ContinualDataset):
     SETTING = 'class-il'
     N_CLASSES_PER_TASK = 2
     N_TASKS = 5
-    SIZE = (30, 1156)
+    SIZE = (300, 1156)
     def __init__(self, args):
         super().__init__(args)
         self.train_path=base_path() + 'NMNIST/Train' #args.train_path # $$ I need to find a way to adjust this!
         self.test_path=base_path() + 'NMNIST/Test'
         # self.pixels_dict=args.pixels_dict
+        print('DATASET ARGS: ',args)
+        self.dt = getattr(args, 'dt', 1)
+        self.seq_len_train = getattr(args, 'seq_len_train', 300)
+        self.seq_len_test = getattr(args, 'seq_len_test', 300)
 
     def get_data_loaders(self) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
         # transform = transforms.Compose((transforms.ToTensor(), Permutation(np.prod(NeuromorphicMNIST.SIZE))))
         
         
-        train_dataset = NMNIST(str(self.train_path), train=True, download=False, transform=None)
+        train_dataset = NMNIST(str(self.train_path), train=True, download=False, transform=None,dt=self.dt,seq_len=self.seq_len_train)
         # train_dataset = NMNIST(str(self.train_path), train=True, download=True, transform=transforms.ToTensor())
-        test_dataset = NMNIST(str(self.test_path), train=False, download=False, transform=None)
+        test_dataset = NMNIST(str(self.test_path), train=False, download=False, transform=None,dt=self.dt,seq_len=self.seq_len_test)
 
         train, test = store_masked_loaders(train_dataset, test_dataset, self)
         return train, test
@@ -221,7 +236,8 @@ class NeuromorphicMNIST(ContinualDataset):
 
     @staticmethod
     def get_loss():
-        return F.binary_cross_entropy
+        # return F.binary_cross_entropy
+        return F.cross_entropy
 
     @set_default_from_args('batch_size')
     def get_batch_size(self) -> int:

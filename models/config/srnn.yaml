@@ -1,30 +1,38 @@
 default:
   optimizer: adam
   trasform: None
-  # Continual learning
+  # Continual learning From NEST
   alpha: 0.1
   lr: 0.0001
-  optimizer: adam
   n_epochs: 10
-  batch_size: 5
+  batch_size: 1
 
   # SRNN architecture
   n_in: 1196
-  srnn_hidden_size: 100
+  srnn_hidden_size: 150
   n_out: 10
-  n_t: 30
+  n_t: 100
   thr: .6
-  tau_m: 2.0
-  tau_o: 0.02
+  tau_m: 0.03
+  tau_o: 0.1
   b_o: 0.0
-  gamma: 0.03
-  dt: .1
-  keep_sparsity: True
-  sparsity: [0.75,0.99,0.0]
+  gamma: 0.5
+  dt: 1.
+  seq_len_train: 100
+  seq_len_test: 100
+  keep_sparsity: False
+  sparsity: [0.0,0.0,0.0]
+  # sparsity: [0.75,0.99,0.0]
+  use_ewc: true 
   classif: true
+  e_lambda: 5000
+
+
 neuro-mnist:
-  30:   # buffer_size
-    buffer_size: 30
+  100:   # Questo rappresenta il buffer_size o una configurazione specifica
+    dt: 1.0
+   
+    lr: 0.0001
 
     
 
