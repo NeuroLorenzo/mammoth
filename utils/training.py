@@ -106,7 +106,6 @@ def train_single_epoch(model: ContinualModel,
         }
 
         loss = model.meta_observe(inputs, labels, not_aug_inputs, epoch=epoch, **extra_fields)
-
         assert not math.isnan(loss)
 
         if scheduler is not None and args.scheduler_mode == 'iter':

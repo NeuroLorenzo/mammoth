@@ -4,3 +4,19 @@ seq-cifar100:
     alpha: 0.3
     lr: 0.03
     model: der
+
+default:
+  optimizer: sgd
+  alpha: 0.2  
+  lr: 0.03
+  n_epochs: 1
+  batch_size: 10
+  e_lambda: 10
+  gamma: 5
+
+seq-mnist:
+  # dataset_config: xder
+  200:
+    alpha: 0.3
+    lr: 0.03
+    model: der

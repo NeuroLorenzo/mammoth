@@ -442,7 +442,11 @@ def print_mean_accuracy(accs: np.ndarray, task_number: int,
                 mean_acc_class_il, 2), round(mean_acc_task_il, 2))
             print(out_str, file=sys.stderr)
             logging.info(out_str)
-            print('\tRaw accuracy values: Class-IL {} | Task-IL {}'.format(accs[0], accs[1]), file=sys.stderr)
+            # print('\tRaw accuracy values: Class-IL {} | Task-IL {}'.format(round(accs[0],3), round(accs[1],3)), file=sys.stderr)
+            raw_class_il = [round(a, 3) for a in accs[0]]
+            raw_task_il = [round(a, 3) for a in accs[1]]
+
+            print('\tRaw accuracy values: Class-IL {} | Task-IL {}'.format(raw_class_il, raw_task_il), file=sys.stderr)
             logging.info('\tRaw accuracy values: Class-IL {} | Task-IL {}'.format(accs[0], accs[1]))
     print('\n', file=sys.stderr)
     return mean_acc

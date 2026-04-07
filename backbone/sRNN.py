@@ -20,7 +20,7 @@ class BaseSRNN(MammothBackbone):
 
     
 
-    def __init__(self, n_in, n_rec, n_out, n_t, thr, tau_m, tau_o, b_o, gamma, dt, classif,keep_sparsity,sparsity,model='LIF' , w_init_gain=(0.5,0.1,0.5), lr_layer=(0.05,0.05,0.05), t_crop=100, visualize=False, visualize_light=True) -> None:    
+    def __init__(self, n_in, n_rec, n_out, n_t, thr, tau_m, tau_o, b_o, gamma, dt, classif,keep_sparsity,sparsity,lr_layer,f_target,c_reg,lr_win,xi,model='LIF' , w_init_gain=(0.5,0.1,0.5), t_crop=100, visualize=False, visualize_light=True) -> None:    
         
         """
         Instantiates the layers of the network.
@@ -46,7 +46,8 @@ class BaseSRNN(MammothBackbone):
         self.b_o      = b_o
         self.model    = model
         self.classif  = classif
-        self.lr_layer = (0.005,0.005,0.005)
+        self.lr_layer = lr_layer
+        # self.lr_layer = (0.005,0.005,0.005)
         # self.lr_layer = lr_layer
         self.t_crop   = t_crop  
         self.visu     = visualize
@@ -54,6 +55,10 @@ class BaseSRNN(MammothBackbone):
         self.visu_l   = visualize_light
         self.keep_sparsity=keep_sparsity
         self.fire_sparsities=[]
+        self.f_target=f_target
+        self.c_reg=c_reg
+        self.lr_win=lr_win
+        
         #Parameters
         self.w_in  = nn.Parameter(torch.Tensor(n_rec, n_in ))
         self.w_rec = nn.Parameter(torch.Tensor(n_rec, n_rec))
@@ -72,6 +77,14 @@ class BaseSRNN(MammothBackbone):
         if self.visu:
             plt.ion()
             self.fig, self.ax_list = plt.subplots(2+self.n_out+5, sharex=True)
+
+        # Nel tuo __init__
+        self.xi = xi  # Forza della metaplasticità
+        self.u_decay = 0.99  # Coeff di persistenza della memoria sinaptica
+
+        self.u_in = torch.zeros_like(self.w_in).to(self.device)
+        self.u_rec = torch.zeros_like(self.w_rec).to(self.device)
+        self.u_out = torch.zeros_like(self.w_out).to(self.device)
 
     def create_mask(self, shape, sparsity_level):
         """
@@ -99,18 +112,18 @@ class BaseSRNN(MammothBackbone):
         
         torch.nn.init.kaiming_normal_(self.w_in)
         self.w_in.data = gain[0]*self.w_in.data
-        # mask_in = self.create_mask(self.w_in.shape, sparsity[0])
-        # self.w_in.data *= mask_in
+        mask_in = self.create_mask(self.w_in.shape, sparsity[0])
+        self.w_in.data *= mask_in
 
         torch.nn.init.kaiming_normal_(self.w_rec)
         self.w_rec.data = gain[1]*self.w_rec.data
-        _rec = self.create_mask(self.w_rec.shape, sparsity[1])
-        # self.w_rec.data *= mask_rec
+        mask_rec = self.create_mask(self.w_rec.shape, sparsity[1])
+        self.w_rec.data *= mask_rec
 
         torch.nn.init.kaiming_normal_(self.w_out)
         self.w_out.data = gain[2]*self.w_out.data
-        # mask_out = self.create_mask(self.w_out.shape, sparsity[2])
-        # self.w_out.data *= mask_out
+        mask_out = self.create_mask(self.w_out.shape, sparsity[2])
+        self.w_out.data *= mask_out
 
         
         # save masks for later use (important!)
@@ -147,16 +160,21 @@ class BaseSRNN(MammothBackbone):
         else:
             self.w_out.grad.zero_()
 
+        
 
-    def forward(self, x,do_training=False, yt=None, returnt="out"):
+    def forward(self, x,do_training=False, yt=None, returnt="out",lr_win=0):
         """
         x: (B, T, n_in) 
         yt: (T, B, n_out) or None
         """
         if self.keep_sparsity:
             self.apply_masks()
+        in_shape=x.shape
+        if len(in_shape)==2:
+            x = x.unsqueeze(0)
         B,T,N = x.shape
-        assert T == self.n_t, f"Temporal Consistency Error: data len T ({T}) different from the simulation times n_t ({self.n_t})"
+        assert T >0, f"Temporal Consistency Error: data len T ({T}) different from the simulation times n_t ({self.n_t})"
+        # assert T == self.n_t, f"Temporal Consistency Error: data len T ({T}) different from the simulation times n_t ({self.n_t})"
 
         self.init_net(B, T, self.n_in, self.n_rec, self.n_out)    # Network reset
          
@@ -183,14 +201,19 @@ class BaseSRNN(MammothBackbone):
         
         
         if self.classif:
-            yo = F.softmax(self.vo, dim=2)
+            yo = F.softmax(self.vo[-self.lr_win:,:,:], dim=2)
         else:
             yo = self.vo
 
         if yt is None:
-            print('output values:',self.vo[-1,:,:])
-            
-            return F.softmax(self.vo[-1,:,:], dim=1)
+            # print('output values:',self.vo[T-1,:,:]) 
+            final_logits = self.vo[-self.lr_win:,:,:] 
+        
+            # Facciamo la media lungo la dimensione temporale (0)
+            # Result shape: [Batch, n_out]
+            avg_logits = torch.mean(final_logits, dim=0)
+            return F.softmax(avg_logits, dim=1)
+            return F.softmax(self.vo[T-1,:,:], dim=1)
             return F.softmax(self.vo.mean(dim=0), dim=1)
             return yo.mean(dim=0)
 
@@ -204,8 +227,9 @@ class BaseSRNN(MammothBackbone):
         else:
             raise NotImplementedError
 
-    def grads_batch(self, x, yo, yt,start_id,end_id,loss=None,penalties=None):   
+    def grads_batch(self, x, yo, yt,start_id,end_id,loss=None,penalties=None,fr_reg=False,use_metapl=False,logit_reg=False):   
         with torch.no_grad():
+            
             # Surrogate derivatives
             h = self.gamma*torch.max(torch.zeros_like(self.v), 1-torch.abs((self.v-self.thr)/self.thr))
             B,T,_=x.shape
@@ -232,12 +256,15 @@ class BaseSRNN(MammothBackbone):
                 # print('yo-yt: ',err,'; CE: ',err_ce)
             # err=err[:,:,start_id:end_id]
             
-            L = torch.einsum('tbo,or->brt', err, self.w_out[start_id:end_id,:])
-            
+            if start_id is not None:
+                L = torch.einsum('tbo,or->brt', err, self.w_out[start_id:end_id,:])
+            else:
+                L = torch.einsum('tbo,or->brt', err, self.w_out)
+                
 
             # Update network visualization
             self.visu_count+=1
-            if self.visu_count%1000 ==0 :
+            if self.visu_count%100000 ==0 :
                 print('uuuuuuuuuu save!---------------------------------------')
                 visual_data = {
                         "input_spikes": x, # [T, 2, 34, 34]
@@ -262,16 +289,79 @@ class BaseSRNN(MammothBackbone):
             #     self.trace_out =  self.trace_out[:,:,-self.t_crop:]
             
             # Weight gradient updates
-            self.w_in.grad  += self.lr_layer[0]*torch.sum(L.unsqueeze(2).expand(-1,-1,self.n_in ,-1) * self.trace_in , dim=(0,3)) 
-            self.w_rec.grad += self.lr_layer[1]*torch.sum(L.unsqueeze(2).expand(-1,-1,self.n_rec,-1) * self.trace_rec, dim=(0,3))
-            self.w_out.grad[start_id:end_id,:] += self.lr_layer[2]*torch.einsum('tbo,brt->or', err, self.trace_out)
+           
+            g_in =  torch.sum(L.unsqueeze(2).expand(-1,-1,self.n_in ,-1) * self.trace_in[:,:,:,-yo.shape[0]:] , dim=(0,3))
+            g_rec = torch.sum(L.unsqueeze(2).expand(-1,-1,self.n_rec,-1) * self.trace_rec[:,:,:,-yo.shape[0]:], dim=(0,3))
+            g_out_chunk = torch.einsum('tbo,brt->or', err, self.trace_out[:,:,-yo.shape[0]:])
+            
+            if fr_reg:
+                fr_mean = torch.mean(self.z, dim=(0, 1))
+                reg_error = (self.f_target - fr_mean)
+                
+                reg_grad_in = torch.einsum('j,bjit->ji', reg_error, self.trace_in) / (T * B)
+                reg_grad_rec = torch.einsum('j,bjit->ji', reg_error, self.trace_rec) / (T * B)
+
+                
+                # Aggiornamento gradienti
+                g_in += self.c_reg * reg_grad_in
+                g_rec += self.c_reg * reg_grad_rec
+
+            if logit_reg:
+                if start_id is not None:
+                    g_out_chunk[start_id:end_id,:]+=0.1*self.w_out.data[start_id:end_id,:]
+                else:
+                    g_out_chunk+=0.1*self.w_out.data
             if penalties:
-                self.w_in.grad+=penalties['w_in']
-                self.w_rec.grad+=penalties['w_rec']
+                g_in+=penalties['w_in']
+                g_rec+=penalties['w_rec']
                 # self.w_out.grad+=penalties['w_out']+0.1*self.w_out.data
-                self.w_out.grad[start_id:end_id,:]+=penalties['w_out'][start_id:end_id,:] +0.1*self.w_out.data[start_id:end_id,:]
+                if start_id is not None:
+                    g_out_chunk[start_id:end_id,:]+=penalties['w_out'][start_id:end_id,:] 
+                else:
+                    g_out_chunk+=penalties['w_out'] 
+                    
                 # self.w_out.grad+=0.001*self.w_out.data #L2 regularization
             
+            if use_metapl:
+                tmp_in = torch.exp(-self.xi * torch.abs(self.w_in))
+                tmp_rec = torch.exp(-self.xi * torch.abs(self.w_rec))
+                tmp_out = torch.exp(-self.xi * torch.abs(self.w_out))
+                
+                condition_in = (torch.sign(self.w_in) * g_in > 0.0)
+                condition_rec = (torch.sign(self.w_rec) * g_rec > 0.0)
+                condition_out = (torch.sign(self.w_out) * g_out_chunk > 0.0)
+
+                # 4. Modula il gradiente
+                mod_g_in = torch.where(condition_in, g_in * tmp_in, g_in)
+                mod_g_rec = torch.where(condition_rec, g_rec * tmp_rec, g_rec)
+                mod_g_out = torch.where(condition_out, g_out_chunk * tmp_out, g_out_chunk)
+
+                # self.u_in = self.u_decay * self.u_in + (1 - self.u_decay) * torch.abs(g_in)
+                # self.u_rec = self.u_decay * self.u_rec + (1 - self.u_decay) * torch.abs(g_rec)
+                # if start_id is not None:
+                    # self.u_out[start_id:end_id,:] = self.u_decay * self.u_out[start_id:end_id,:] + (1 - self.u_decay) * torch.abs(g_out_chunk)
+                # else:
+                    # self.u_out=self.u_decay * self.u_out + (1 - self.u_decay) * torch.abs(g_out_chunk)
+                self.w_in.grad += self.lr_layer[0] *mod_g_in
+                self.w_rec.grad += self.lr_layer[1] *mod_g_rec
+                self.w_out.grad +=  self.lr_layer[2] *mod_g_out
+
+                # self.w_in.grad  += g_in/ (1 + self.xi * self.u_in)
+                # self.w_rec.grad += g_rec/ (1 + self.xi * self.u_in)
+                # if start_id is not None:
+                    # mod_g_out = g_out_chunk / (1 + self.xi * self.u_out[start_id:end_id,:])
+                    # self.w_out.grad[start_id:end_id,:] += mod_g_out
+                # else:
+                    # mod_g_out = g_out_chunk / (1 + self.xi * self.u_out)
+                    # self.w_out.grad+=mod_g_out
+            else:
+                self.w_in.grad  += self.lr_layer[0] *g_in
+                self.w_rec.grad += self.lr_layer[1] *g_rec
+                self.w_out.grad +=  self.lr_layer[2] *g_out_chunk
+            
+            return err
+
+                
     def update_plot(self, x, z, yo, yt, L, trace_reg, trace_in, trace_rec, trace_out):
         """Adapted from the original TensorFlow e-prop implemation from TU Graz, available at https://github.com/IGITUGraz/eligibility_propagation"""
     
@@ -354,6 +444,11 @@ def srnn_spiking(
     classif: bool,
     keep_sparsity: bool,
     sparsity: tuple,
+    lr_layer: tuple,
+    f_target: int,
+    c_reg:  float,
+    lr_win: int,
+    xi: float,
     ) -> BaseSRNN:
 
         return BaseSRNN(
@@ -370,4 +465,9 @@ def srnn_spiking(
             classif=classif,
             keep_sparsity=keep_sparsity,
             sparsity=sparsity,
+            lr_layer=lr_layer,
+            f_target=f_target,
+            c_reg=c_reg,
+            lr_win=lr_win,
+            xi=xi,
         )

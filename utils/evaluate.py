@@ -81,7 +81,7 @@ def evaluate(model: 'ContinualModel', dataset: 'ContinualDataset', last=False, r
                     outputs = model.future_forward(inputs)
                 else:
                     outputs = model(inputs)
-                    print('labels:',labels)
+                    # print('labels:',labels)
 
             if return_loss:
                 loss = loss_fn(outputs, labels)

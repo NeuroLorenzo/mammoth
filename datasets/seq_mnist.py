@@ -89,6 +89,7 @@ class SequentialMNIST(ContinualDataset):
 
     @set_default_from_args("backbone")
     def get_backbone():
+        # return "vit"
         return "mnistmlp"
 
     @staticmethod
