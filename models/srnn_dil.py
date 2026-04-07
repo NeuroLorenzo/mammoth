@@ -5,7 +5,7 @@
 
 from torch.nn import functional as F
 import torch
-
+import os
 from models.utils.continual_model import ContinualModel
 from utils.args import ArgumentParser, add_rehearsal_args
 from utils.buffer import Buffer
@@ -31,6 +31,12 @@ class srnn(ContinualModel):
         self.fig, self.ax_list = plt.subplots(2, sharex=True)
         self.print_sparsity=False
         self.fish = None
+        self.batch_id = 0
+        self.last_firing_rates=[]
+        self.last_labels=[]
+        self.last_outputs=[]
+        self.loss_terms=[]
+        
     def end_task(self, dataset):
         if self.args.use_ewc:
             
@@ -102,12 +108,29 @@ class srnn(ContinualModel):
                     self.fish[name] *= self.args.gamma
                     self.fish[name]  += fish[name] 
 
+        
+            
+            stats = {
+                'task_id': self.current_task,
+                'fisher': {k: v.cpu() for k, v in self.fish.items()},
+                'weights': {k: v.cpu() for k, v in self.checkpoint.items()},
+                'firing_rates': self.last_firing_rates, # Assicurati di salvarli in observe
+                'labels': self.last_labels,
+                'outputs': self.last_outputs
+            }
+            self.last_firing_rates=[]
+            self.last_labels=[]
+            self.last_outputs=[]
+            self.loss_terms=[]
+            os.makedirs('debug_data', exist_ok=True)
+            torch.save(stats, f'debug_data/stats_task_{self.current_task}.pt')
+            print('COMPUTED')
         if self.print_sparsity:
             ax = self.ax_list[0]
             ax.clear()
             ax.plot(self.net.fire_sparsities)
             plt.savefig(f'task_{j}_sparsity.png', dpi=300, bbox_inches='tight')
-        print('COMPUTED')
+        
         
         if self.args.weight_align and (self.current_task > 0): # Non farlo per la prima task
             with torch.no_grad():
@@ -128,7 +151,7 @@ class srnn(ContinualModel):
                 
                 print(f"--- Weight Aligning Applicato ---")
                 print(f"Norma Vecchia: {norm_old:.4f}, Norma Nuova: {norm_new:.4f}, Gamma: {gamma:.4f}")
-
+        self.batch_id=0
             
     def get_penalty_grads_map(self):
         grads = {}
@@ -165,12 +188,13 @@ class srnn(ContinualModel):
         # Custom learning rule
         # -------------------------
         if labels is not None:
+            log_data_flag= ((self.batch_id%100) ==0)
             if self.checkpoint is not None: # Updated only after the first iteration of ewc
                 penalty_grads=self.get_penalty_grads_map()
-                self.net.grads_batch(inputs, outputs, targets,start_id=None,end_id=None,loss=self.loss,penalties=penalty_grads,logit_reg=self.args.logit_reg)
+                self.net.grads_batch(inputs, outputs, targets,start_id=None,end_id=None,loss=self.loss,penalties=penalty_grads,logit_reg=self.args.logit_reg,log_data_flag=log_data_flag)
             else: #first ewc run, or no ewc
                 # self.net.grads_batch(inputs, outputs[:,:,start_id:end_id], targets[:,:,start_id:end_id],start_id,end_id,self.loss)
-                self.net.grads_batch(inputs, outputs, targets,start_id=None,end_id=None,loss=self.loss,use_metapl=self.args.use_metapl,logit_reg=self.args.logit_reg)
+                self.net.grads_batch(inputs, outputs, targets,start_id=None,end_id=None,loss=self.loss,use_metapl=self.args.use_metapl,logit_reg=self.args.logit_reg,log_data_flag=log_data_flag)
                 
              # Apply weight updates
             self.opt.step()
@@ -186,10 +210,19 @@ class srnn(ContinualModel):
             
                 if self.checkpoint is not None: # Updated only after the first iteration of ewc
                     penalty_grads=self.get_penalty_grads_map()
-                    self.net.grads_batch(buf_inputs, buf_outputs, buf_labels,start_id=None,end_id=None,loss=self.loss,penalties=penalty_grads,logit_reg=self.args.logit_reg)
+                    self.net.grads_batch(buf_inputs, buf_outputs, buf_labels,start_id=None,end_id=None,loss=self.loss,penalties=penalty_grads,logit_reg=self.args.logit_reg,log_data_flag=log_data_flag)
                 else:
-                    self.net.grads_batch(buf_inputs, buf_outputs, buf_labels,start_id=None,end_id=None,loss=self.loss,logit_reg=self.args.logit_reg)
-                    
+                    self.net.grads_batch(buf_inputs, buf_outputs, buf_labels,start_id=None,end_id=None,loss=self.loss,logit_reg=self.args.logit_reg,log_data_flag=log_data_flag)
+            
+            self.batch_id +=1
+            if log_data_flag:
+                self.last_firing_rates.append(torch.mean(self.net.z, dim=(0, 1)).cpu())
+                self.last_labels(labels.cpu())
+
+                final_logits = self.net.vo[-self.net.lr_win:,:,:] 
+                avg_logits = torch.mean(final_logits, dim=0)
+                self.last_outputs.append(avg_logits.cpu())
+                self.loss_terms.append(self.net.loss_terms)
             return loss.item()
 
 

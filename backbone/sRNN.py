@@ -86,6 +86,7 @@ class BaseSRNN(MammothBackbone):
         self.u_rec = torch.zeros_like(self.w_rec).to(self.device)
         self.u_out = torch.zeros_like(self.w_out).to(self.device)
 
+        self.batch_logs={}
     def create_mask(self, shape, sparsity_level):
         """
         Generate a binary mask with the given sparsity level.
@@ -227,7 +228,7 @@ class BaseSRNN(MammothBackbone):
         else:
             raise NotImplementedError
 
-    def grads_batch(self, x, yo, yt,start_id,end_id,loss=None,penalties=None,fr_reg=False,use_metapl=False,logit_reg=False):   
+    def grads_batch(self, x, yo, yt,start_id,end_id,loss=None,penalties=None,fr_reg=False,use_metapl=False,logit_reg=False,log_data_flag=False):   
         with torch.no_grad():
             
             # Surrogate derivatives
@@ -293,6 +294,12 @@ class BaseSRNN(MammothBackbone):
             g_in =  torch.sum(L.unsqueeze(2).expand(-1,-1,self.n_in ,-1) * self.trace_in[:,:,:,-yo.shape[0]:] , dim=(0,3))
             g_rec = torch.sum(L.unsqueeze(2).expand(-1,-1,self.n_rec,-1) * self.trace_rec[:,:,:,-yo.shape[0]:], dim=(0,3))
             g_out_chunk = torch.einsum('tbo,brt->or', err, self.trace_out[:,:,-yo.shape[0]:])
+            if log_data_flag:
+                self.batch_logs={}
+                self.batch_logs['main_grad'] = {}
+                self.batch_logs['main_grad']['g_in']=g_in.cpu()
+                self.batch_logs['main_grad']['g_rec']=g_rec.cpu()
+                self.batch_logs['main_grad']['g_out']=g_out_chunk.cpu()
             
             if fr_reg:
                 fr_mean = torch.mean(self.z, dim=(0, 1))
@@ -305,12 +312,21 @@ class BaseSRNN(MammothBackbone):
                 # Aggiornamento gradienti
                 g_in += self.c_reg * reg_grad_in
                 g_rec += self.c_reg * reg_grad_rec
+                if log_data_flag:
+                    self.batch_logs['fr_reg'] = {}
+
+                    self.batch_logs['fr_reg']['g_in']=self.c_reg * reg_grad_in.cpu()
+                    self.batch_logs['fr_reg']['g_rec']=self.c_reg * reg_grad_rec.cpu()
 
             if logit_reg:
                 if start_id is not None:
                     g_out_chunk[start_id:end_id,:]+=0.1*self.w_out.data[start_id:end_id,:]
                 else:
                     g_out_chunk+=0.1*self.w_out.data
+                
+                if log_data_flag:
+                    self.batch_logs['l_reg'] = 0.1*self.w_out.data.cpu()
+
             if penalties:
                 g_in+=penalties['w_in']
                 g_rec+=penalties['w_rec']
@@ -319,6 +335,12 @@ class BaseSRNN(MammothBackbone):
                     g_out_chunk[start_id:end_id,:]+=penalties['w_out'][start_id:end_id,:] 
                 else:
                     g_out_chunk+=penalties['w_out'] 
+
+                if log_data_flag:
+                    self.batch_logs['ewc'] = {}
+                    self.batch_logs['ewc']['w_in'] =penalties['w_in']
+                    self.batch_logs['ewc']['w_rec'] =penalties['w_rec']
+                    self.batch_logs['ewc']['w_out'] =penalties['w_out']
                     
                 # self.w_out.grad+=0.001*self.w_out.data #L2 regularization
             
@@ -346,6 +368,14 @@ class BaseSRNN(MammothBackbone):
                 self.w_rec.grad += self.lr_layer[1] *mod_g_rec
                 self.w_out.grad +=  self.lr_layer[2] *mod_g_out
 
+                if log_data_flag:
+                    self.batch_logs['metapl_reduction'] = {}
+                    avg_reduction = mod_g_in.norm() / (g_in.norm() + 1e-8)
+                    self.batch_logs['metapl_reduction']['g_in'] = avg_reduction.item()
+                    avg_reduction = mod_g_rec.norm() / (g_rec.norm() + 1e-8)
+                    self.batch_logs['metapl_reduction']['g_rec'] = avg_reduction.item()
+                    avg_reduction = mod_g_out.norm() / (g_out_chunk.norm() + 1e-8)
+                    self.batch_logs['metapl_reduction']['g_out'] = avg_reduction.item()
                 # self.w_in.grad  += g_in/ (1 + self.xi * self.u_in)
                 # self.w_rec.grad += g_rec/ (1 + self.xi * self.u_in)
                 # if start_id is not None:
@@ -359,6 +389,7 @@ class BaseSRNN(MammothBackbone):
                 self.w_rec.grad += self.lr_layer[1] *g_rec
                 self.w_out.grad +=  self.lr_layer[2] *g_out_chunk
             
+                
             return err
 
                 
