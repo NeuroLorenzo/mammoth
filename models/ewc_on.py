@@ -72,10 +72,10 @@ class EwcOn(ContinualModel):
         self.opt.zero_grad()
         outputs = self.net(inputs)
         if self.checkpoint is not None:
-            self.net.set_grads(self.get_penalty_grads())
+            self.net.set_grads(self.get_penalty_grads()) #set the grads to the derivative of the fisher loss term
         loss = self.loss(outputs, labels)
         assert not torch.isnan(loss)
-        loss.backward()
+        loss.backward() #add to the grads the backprop of the loss
         self.opt.step()
 
         return loss.item()

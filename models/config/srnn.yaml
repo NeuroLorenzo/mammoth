@@ -3,13 +3,15 @@ default:
   trasform: None
   # Continual learning From NEST
   alpha: 0.1
-  lr: 0.0001
-  n_epochs: 30
+  lr: 0.001
+  # n_epochs: 30
+  n_epochs: 10
   batch_size: 32
 
   # SRNN architecture
   n_in: 1196
   srnn_hidden_size: 150
+  # srnn_hidden_size: 500
   n_out: 10
   thr: .6
   tau_m: 30
@@ -22,22 +24,26 @@ default:
   keep_sparsity: False  
   sparsity: [0.0,0.0,0.0]
   # sparsity: [0.75,0.99,0.0]
-  lr_layer: [0.005,0.005,0.005]
+  #lr_layer: [0.005,0.005,0.005]
+  lr_layer: [0.5,0.5,0.5]
   f_target: 10
+  fr_reg: false
   c_reg: 0
   lr_win: 10
   classif: true
   gamma: 0.5
-  e_lambda: 0.5
+  e_lambda: 50
   weight_align: false
   use_buffer: false
   use_metapl: false
-  use_ewc: true 
-  xi: 0.01
+  use_ewc: true
+  # xi: 0.01
+  xi: 20
+  meta_func: 'exp'
   logit_reg: false
 
 neuro-mnist:
-  100:   # Questo rappresenta il buffer_size o una configurazione specifica
+  100:   
     dt: 1.0   
     lr: 0.0001
 

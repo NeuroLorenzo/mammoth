@@ -205,7 +205,7 @@ class PermutedNMNIST(ContinualDataset):
     # SETTING = 'class-il'
     SETTING = 'domain-il'
     N_CLASSES_PER_TASK = 10
-    N_TASKS = 10
+    N_TASKS = 20
     SIZE = (300, 1196)
     def __init__(self, args):
         super().__init__(args)

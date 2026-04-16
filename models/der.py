@@ -25,30 +25,31 @@ class Der(ContinualModel):
                             help='Penalty weight.')
         return parser
     def end_task(self, dataset):
-        fish = torch.zeros_like(self.net.get_params())
+        if self.args.use_ewc:
+            fish = torch.zeros_like(self.net.get_params())
 
-        for j, data in enumerate(dataset.train_loader):
-            inputs, labels = data[0], data[1]
-            inputs, labels = inputs.to(self.device), labels.to(self.device)
-            for ex, lab in zip(inputs, labels):
-                self.opt.zero_grad()
-                output = self.net(ex.unsqueeze(0))
-                loss = - F.nll_loss(self.logsoft(output), lab.unsqueeze(0),
-                                    reduction='none')
-                exp_cond_prob = torch.mean(torch.exp(loss.detach().clone()))
-                loss = torch.mean(loss)
-                loss.backward()
-                fish += exp_cond_prob * self.net.get_grads() ** 2
+            for j, data in enumerate(dataset.train_loader):
+                inputs, labels = data[0], data[1]
+                inputs, labels = inputs.to(self.device), labels.to(self.device)
+                for ex, lab in zip(inputs, labels):
+                    self.opt.zero_grad()
+                    output = self.net(ex.unsqueeze(0))
+                    loss = - F.nll_loss(self.logsoft(output), lab.unsqueeze(0),
+                                        reduction='none')
+                    exp_cond_prob = torch.mean(torch.exp(loss.detach().clone()))
+                    loss = torch.mean(loss)
+                    loss.backward()
+                    fish += exp_cond_prob * self.net.get_grads() ** 2
 
-        fish /= (len(dataset.train_loader) * self.args.batch_size)
+            fish /= (len(dataset.train_loader) * self.args.batch_size)
 
-        if self.fish is None:
-            self.fish = fish
-        else:
-            self.fish *= self.args.gamma
-            self.fish += fish
+            if self.fish is None:
+                self.fish = fish
+            else:
+                self.fish *= self.args.gamma
+                self.fish += fish
 
-        self.checkpoint = self.net.get_params().data.clone()
+            self.checkpoint = self.net.get_params().data.clone()
 
     
     def get_penalty_grads(self):

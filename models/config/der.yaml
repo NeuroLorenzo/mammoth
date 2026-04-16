@@ -13,6 +13,7 @@ default:
   batch_size: 10
   e_lambda: 10
   gamma: 5
+  use_ewc: false
 
 seq-mnist:
   # dataset_config: xder
