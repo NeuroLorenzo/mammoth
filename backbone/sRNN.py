@@ -246,8 +246,8 @@ class BaseSRNN(MammothBackbone):
     
   
     @profile
-    def compute_fr_reg(self,T,B,log_data_flag):
-        fr_mean = torch.mean(self.z, dim=(0, 1))
+    def compute_fr_reg(self,T,B,log_data_flag,g_in,g_rec):
+        fr_mean = torch.mean(self.z, dim=(0, 1))*1000 # from spike/ms to spikes/s (considering 1 timestep=1 ms)
         reg_error = (self.f_target - fr_mean)
         
         reg_grad_in = torch.einsum('j,bjit->ji', reg_error, self.trace_in) / (T * B)
@@ -257,12 +257,14 @@ class BaseSRNN(MammothBackbone):
         # Update gradients
         g_in += self.c_reg * reg_grad_in
         g_rec += self.c_reg * reg_grad_rec
+        
         if log_data_flag:
             self.batch_logs['fr_reg'] = {}
 
             self.batch_logs['fr_reg']['g_in']=self.c_reg * reg_grad_in.cpu()
             self.batch_logs['fr_reg']['g_rec']=self.c_reg * reg_grad_rec.cpu()
 
+        return g_in,g_rec
 
     @profile
     def compute_metapl(self,g_in,g_rec,g_out_chunk,log_data_flag):
@@ -342,7 +344,7 @@ class BaseSRNN(MammothBackbone):
                 self.batch_logs['main_grad']['g_out']=g_out_chunk.cpu()
             
             if fr_reg:
-                self.compute_fr_reg(T,B,log_data_flag)
+                g_in,g_rec=self.compute_fr_reg(T,B,log_data_flag,g_in,g_rec)
                 
             if logit_reg:
                 if start_id is not None:
@@ -371,7 +373,7 @@ class BaseSRNN(MammothBackbone):
                 # self.w_out.grad+=0.001*self.w_out.data #L2 regularization
             
             if use_metapl:
-                self.compute_metapl()
+                self.compute_metapl(g_in,g_rec,g_out_chunk,log_data_flag)
             else:
                 self.w_in.grad  += self.lr_layer[0] *g_in
                 self.w_rec.grad += self.lr_layer[1] *g_rec

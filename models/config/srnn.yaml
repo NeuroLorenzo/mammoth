@@ -1,5 +1,5 @@
 default:
-  optimizer: adam
+  optimizer: sgd
   trasform: None
   # Continual learning From NEST
   alpha: 0.1
@@ -26,17 +26,18 @@ default:
   # sparsity: [0.75,0.99,0.0]
   #lr_layer: [0.005,0.005,0.005]
   lr_layer: [0.5,0.5,0.5]
-  f_target: 10
-  fr_reg: false
-  c_reg: 0
+  f_target: 100
+  
+  c_reg: 0.01
   lr_win: 10
   classif: true
   gamma: 0.5
   e_lambda: 50
   weight_align: false
   use_buffer: false
-  use_metapl: false
-  use_ewc: true
+  use_metapl: true
+  use_ewc: false
+  fr_reg: true
   # xi: 0.01
   xi: 20
   meta_func: 'exp'

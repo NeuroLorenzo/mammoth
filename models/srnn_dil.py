@@ -254,9 +254,9 @@ class srnn(ContinualModel):
             log_data_flag= ((self.batch_id%20) ==0) #save data to study the network every 20 batches
             if self.checkpoint is not None: # Updated only after the first iteration of ewc
                 penalty_grads=self.get_penalty_grads_map()
-                self.net.grads_batch(inputs, outputs, targets,start_id=None,end_id=None,loss=self.loss,penalties=penalty_grads,logit_reg=self.args.logit_reg,log_data_flag=log_data_flag)
+                self.net.grads_batch(inputs, outputs, targets,start_id=None,end_id=None,loss=self.loss,penalties=penalty_grads,fr_reg=self.args.fr_reg,logit_reg=self.args.logit_reg,log_data_flag=log_data_flag)
             else: 
-                self.net.grads_batch(inputs, outputs, targets,start_id=None,end_id=None,loss=self.loss,use_metapl=self.args.use_metapl,logit_reg=self.args.logit_reg,log_data_flag=log_data_flag)
+                self.net.grads_batch(inputs, outputs, targets,start_id=None,end_id=None,loss=self.loss,use_metapl=self.args.use_metapl,fr_reg=self.args.fr_reg,logit_reg=self.args.logit_reg,log_data_flag=log_data_flag)
                 
              # Apply weight updates
             self.opt.step()
