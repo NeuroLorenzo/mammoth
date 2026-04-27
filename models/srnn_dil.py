@@ -190,34 +190,68 @@ class srnn(ContinualModel):
             self.last_labels=[]
             self.last_outputs=[]
             self.loss_terms=[]
-            os.makedirs('debug_data', exist_ok=True)
-            torch.save(stats, f'debug_data/stats_task_{self.current_task}.pt')
+            folder='debug_data_metapl_su'
+            os.makedirs(folder, exist_ok=True)
+            torch.save(stats, f'{folder}/stats_task_{self.current_task}.pt')
 
         
         
         
         self.batch_id=0
             
-        if self.args.use_metapl:
-            checkpoint = {
-                'w_in': self.net.w_in.data.clone(),
-                'w_rec': self.net.w_rec.data.clone(),
-                'w_out': self.net.w_out.data.clone()
-            }
-            stats = {
-                'task_id': self.current_task,
-                'weights': {k: v.cpu() for k, v in checkpoint.items()},
-                'firing_rates': self.last_firing_rates, # Assicurati di salvarli in observe
-                'labels': self.last_labels,
-                'losses': self.loss_terms,
-                'outputs': self.last_outputs
-            }
-            self.last_firing_rates=[]
-            self.last_labels=[]
-            self.last_outputs=[]
-            self.loss_terms=[]
-            os.makedirs('debug_data_metapl', exist_ok=True)
-            torch.save(stats, f'debug_data_metapl/stats_task_{self.current_task}.pt')
+        # if self.args.use_metapl:
+            
+        #     if self.args.filter_most_active:
+        #         index_sorted=self.net.z_mean_acc.argsort()
+        #         most_active_ids=index_sorted[-self.args.n_active_filter:]
+        #         print(f'10 most firing neurons: {most_active_ids} with rates: {self.net.z_mean_acc[most_active_ids]}')
+        #         self.net.z_mean_acc=None
+        #         if self.current_task>8:
+        #             self.net.mask_z=torch.zeros(self.net.n_rec, dtype=torch.bool)
+        #             self.net.mask_z[most_active_ids]=True
+        #     checkpoint = {
+        #         'w_in': self.net.w_in.data.clone(),
+        #         'w_rec': self.net.w_rec.data.clone(),
+        #         'w_out': self.net.w_out.data.clone()
+        #     }
+        #     stats = {
+        #         'task_id': self.current_task,
+        #         'weights': {k: v.cpu() for k, v in checkpoint.items()},
+        #         'firing_rates': self.last_firing_rates, # Assicurati di salvarli in observe
+        #         'labels': self.last_labels,
+        #         'losses': self.loss_terms,
+        #         'outputs': self.last_outputs
+        #     }
+        #     self.last_firing_rates=[]
+        #     self.last_labels=[]
+        #     self.last_outputs=[]
+        #     self.loss_terms=[]
+        #     folder='debug_data_metapl_fullds'
+        #     os.makedirs(folder, exist_ok=True)
+        #     torch.save(stats, f'{folder}/stats_task_{self.current_task}.pt')
+
+
+        if self.args.weight_align and (self.current_task > 0): # Non farlo per la prima task
+            with torch.no_grad():
+
+                # 1. Compute the norm of the weights of previous tasks (:start_id)
+                start_id,end_id=self.dataset.get_offsets()
+                print('start_id ', start_id, ', end_id', end_id)
+                old_weights = self.net.w_out[:start_id, :]
+                norm_old = torch.norm(old_weights, p=2, dim=1).mean()
+                
+                # 2. Compute the norm of the weights of the current task 
+                new_weights = self.net.w_out[start_id:end_id, :]
+                norm_new = torch.norm(new_weights, p=2, dim=1).mean()
+                
+                # 3. Computing scaling factor
+                gamma = norm_old / norm_new
+                
+                # 4. balance the weights of the current task
+                self.net.w_out[start_id:end_id, :] *= gamma
+                
+                print(f"--- Weight Aligning Applicato ---")
+                print(f"Norma Vecchia: {norm_old:.4f}, Norma Nuova: {norm_new:.4f}, Gamma: {gamma:.4f}")
     @profile
     def get_penalty_grads_map(self):
         grads = {}
@@ -252,6 +286,7 @@ class srnn(ContinualModel):
         # Custom learning rule
         if labels is not None:
             log_data_flag= ((self.batch_id%20) ==0) #save data to study the network every 20 batches
+            log_data_flag= False
             if self.checkpoint is not None: # Updated only after the first iteration of ewc
                 penalty_grads=self.get_penalty_grads_map()
                 self.net.grads_batch(inputs, outputs, targets,start_id=None,end_id=None,loss=self.loss,penalties=penalty_grads,fr_reg=self.args.fr_reg,logit_reg=self.args.logit_reg,log_data_flag=log_data_flag)

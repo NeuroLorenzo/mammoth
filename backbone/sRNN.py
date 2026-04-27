@@ -16,7 +16,7 @@ class BaseSRNN(MammothBackbone):
 
     
 
-    def __init__(self, n_in, n_rec, n_out, n_t, thr, tau_m, tau_o, b_o, gamma, dt, classif,keep_sparsity,sparsity,lr_layer,f_target,c_reg,lr_win,xi,model='LIF' , w_init_gain=(0.5,0.1,0.5), t_crop=100, visualize=False, visualize_light=True) -> None:    
+    def __init__(self, n_in, n_rec, n_out, n_t, thr, tau_m, tau_o, b_o, gamma, dt, classif,keep_sparsity,syn_scale,sparsity,lr_layer,f_target,c_reg,lr_win,xi,model='LIF' , w_init_gain=(0.5,0.1,0.5), t_crop=100, visualize=False, visualize_light=True) -> None:    
         
         """
         Instantiates the layers of the network.
@@ -48,6 +48,7 @@ class BaseSRNN(MammothBackbone):
         self.visu_count    = 0
         self.visu_l   = visualize_light
         self.keep_sparsity=keep_sparsity
+        self.syn_scale=syn_scale
         self.fire_sparsities=[]
         self.f_target=f_target
         self.c_reg=c_reg
@@ -81,6 +82,8 @@ class BaseSRNN(MammothBackbone):
         self.u_out = torch.zeros_like(self.w_out).to(self.device)
 
         self.batch_logs={}
+        self.z_mean_acc=None
+        self.mask_z=None
     def create_mask(self, shape, sparsity_level):
         """
         Generate a binary mask with the given sparsity level.
@@ -108,16 +111,19 @@ class BaseSRNN(MammothBackbone):
         self.w_in.data = gain[0]*self.w_in.data
         mask_in = self.create_mask(self.w_in.shape, sparsity[0])
         self.w_in.data *= mask_in
+        self.target_w_in=self.w_in.norm(p=1,dim=1,keepdim=True).to(self.device) 
 
         torch.nn.init.kaiming_normal_(self.w_rec)
         self.w_rec.data = gain[1]*self.w_rec.data
         mask_rec = self.create_mask(self.w_rec.shape, sparsity[1])
         self.w_rec.data *= mask_rec
+        self.target_w_rec=self.w_rec.norm(p=1,dim=1,keepdim=True).to(self.device)
 
         torch.nn.init.kaiming_normal_(self.w_out)
         self.w_out.data = gain[2]*self.w_out.data
         mask_out = self.create_mask(self.w_out.shape, sparsity[2])
         self.w_out.data *= mask_out
+        self.target_w_out=self.w_out.norm(p=1,dim=1,keepdim=True)
 
         
         # save masks for later use
@@ -154,6 +160,7 @@ class BaseSRNN(MammothBackbone):
     @profile
     def integrate_odes(self,T,x):
         for t in range(T - 1):
+            
             self.v[t+1] = (
                 self.alpha * self.v[t]
                 + self.z[t] @ self.w_rec.T
@@ -162,13 +169,23 @@ class BaseSRNN(MammothBackbone):
             )
 
             self.z[t+1] = (self.v[t+1] > self.thr).float()
-
+            if self.mask_z is not None:
+                self.z[t+1][:,self.mask_z]=0 # remove 10 most firing neurons
             self.vo[t+1] = (
                 self.kappa * self.vo[t]
                 + self.z[t+1] @ self.w_out.T
                 + self.b_o
             )
         
+    @profile
+    @torch.no_grad()
+    def apply_homeostasis(self):
+        eps=1e-8
+        self.w_in.data*=self.target_w_in.to(self.w_in.device)/(self.w_in.norm(p=1,dim=1,keepdim=True)+ eps)
+        self.w_rec.data*=self.target_w_rec.to(self.w_rec.device)/(self.w_rec.norm(p=1,dim=1,keepdim=True)+ eps)
+        self.w_out.data*=self.target_w_out.to(self.w_out.device)/(self.w_out.norm(p=1,dim=1,keepdim=True)+ eps)
+
+
     @profile
     def forward(self, x,do_training=False, yt=None, returnt="out",lr_win=0):
         """
@@ -177,6 +194,8 @@ class BaseSRNN(MammothBackbone):
         """
         if self.keep_sparsity:
             self.apply_masks()
+        if self.syn_scale:
+            self.apply_homeostasis()
         in_shape=x.shape
         if len(in_shape)==2:
             x = x.unsqueeze(0)
@@ -192,6 +211,13 @@ class BaseSRNN(MammothBackbone):
         self.integrate_odes(T,x)
 
         fire_sparsity=torch.count_nonzero(self.z)/(T*B*N)
+        if self.z_mean_acc is None:
+            
+            self.z_mean_acc=self.z.mean(axis=(0,1))
+        else:
+            self.z_mean_acc+=self.z.mean(axis=(0,1))
+        
+
         self.fire_sparsities.append(100 -100*fire_sparsity.cpu())
         
         
@@ -404,6 +430,7 @@ def srnn_spiking(
     dt: float,
     classif: bool,
     keep_sparsity: bool,
+    syn_scale: bool,
     sparsity: tuple,
     lr_layer: tuple,
     f_target: int,
@@ -425,6 +452,7 @@ def srnn_spiking(
             dt=dt,
             classif=classif,
             keep_sparsity=keep_sparsity,
+            syn_scale=syn_scale,
             sparsity=sparsity,
             lr_layer=lr_layer,
             f_target=f_target,

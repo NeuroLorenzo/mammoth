@@ -5,13 +5,13 @@ default:
   alpha: 0.1
   lr: 0.001
   # n_epochs: 30
-  n_epochs: 10
-  batch_size: 32
+  n_epochs: 1
+  batch_size: 16
 
   # SRNN architecture
   n_in: 1196
   srnn_hidden_size: 150
-  # srnn_hidden_size: 500
+  # srnn_hidden_size: 300
   n_out: 10
   thr: .6
   tau_m: 30
@@ -22,13 +22,14 @@ default:
   seq_len_train: 100
   seq_len_test: 100
   keep_sparsity: False  
+  syn_scale: False
   sparsity: [0.0,0.0,0.0]
   # sparsity: [0.75,0.99,0.0]
   #lr_layer: [0.005,0.005,0.005]
-  lr_layer: [0.5,0.5,0.5]
+  lr_layer: [0.5,0.5,0.5] 
   f_target: 100
   
-  c_reg: 0.01
+  c_reg: 0.001
   lr_win: 10
   classif: true
   gamma: 0.5
@@ -37,7 +38,9 @@ default:
   use_buffer: false
   use_metapl: true
   use_ewc: false
-  fr_reg: true
+  fr_reg: false
+  filter_most_active: false
+  n_active_filter: 1
   # xi: 0.01
   xi: 20
   meta_func: 'exp'

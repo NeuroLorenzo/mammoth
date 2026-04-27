@@ -56,9 +56,9 @@ class NMNIST(VisionDataset):
 
         data = self._load_data()
         self.data = np.stack(data, axis=0)
-        if transform is not None:
-            print("Pre-applying transformations to the whole dataset...")
-            self.data = transform(self.data)     
+        # if transform is not None:
+        #     print("Pre-applying transformations to the whole dataset...")
+        #     self.data = transform(self.data)     
             # self.transform = None # $$ applying transform ONLY durinig initialization
         # self.targets = np.array(self.targets)
         self.indexes = np.arange(len(self.targets))
@@ -105,7 +105,9 @@ class NMNIST(VisionDataset):
 
         img, target = self.data[index], self.targets[index]
         # target = np.tile(self.targets[index],self.seq_len)
-
+        if self.transform is not None:
+            img=self.transform(img)
+        
         # img = Image.fromarray(img, mode='L')
 
     
@@ -186,7 +188,17 @@ class SpatialPermutation(object):
         print('new dataset loaded:',torch.unique(sample),sample.shape)
         return sample[:,:, self.perm]
 
+class SpatialPermutation2D(object):
+    def __init__(self, perm):
+        self.perm = perm
+        print('permutation:',perm)
 
+    def __call__(self, sample):
+        # sample ha shape (T, N_pixels) -> es. (300, 1156)
+        # Permutiamo solo la seconda dimensione (i neuroni)
+        # print('new dataset loaded:',torch.unique(sample),sample.shape)
+        return sample[:, self.perm]
+    
 class PermutedNMNIST(ContinualDataset):
     """Permuted Neuromorphic MNIST Dataset.
 
@@ -205,8 +217,8 @@ class PermutedNMNIST(ContinualDataset):
     # SETTING = 'class-il'
     SETTING = 'domain-il'
     N_CLASSES_PER_TASK = 10
-    N_TASKS = 20
-    SIZE = (300, 1196)
+    N_TASKS = 10
+    SIZE = (150, 1196)
     def __init__(self, args):
         super().__init__(args)
         self.train_path=base_path() + 'NMNIST/Train' #args.train_path # $$ I need to find a way to adjust this!
@@ -235,7 +247,9 @@ class PermutedNMNIST(ContinualDataset):
         # Usa torch.from_numpy se i tuoi dati sono numpy.
         transform = transforms.Compose([
             torch.from_numpy, 
-            SpatialPermutation(perm)
+            SpatialPermutation2D(perm)
+            # SpatialPermutation(perm)
+
         ])
 
         
