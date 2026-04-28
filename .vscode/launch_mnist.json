@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Mammoth Main",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--model", "der",
+                "--dataset", "seq-mnist",
+                "--model_config", "default",
+                "--buffer_size", "200",
+                "--notes", "training der su MNIST buffer_size 30",
+                "--seed","0",
+                "--debug_mode","0",
+                "--wandb_project","mammoth-SRNN-test",
+                "--wandb_entity","NILAB_unimore",
+                "--joint","0",
+                ">","out.txt"
+            ]
+        }
+    ]
+}

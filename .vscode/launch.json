@@ -1,0 +1,107 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Mammoth Main",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--model", "srnn",
+                "--dataset", "neuro-mnist",
+                "--model_config", "default",
+                "--buffer_size", "30",
+                "--notes", "training SRNN su Neuro-MNIST preprocessato con T=30 invertito, no sparsity, buffer_size 30",
+                "--seed","0",
+                "--debug_mode","0",
+                "--wandb_project","mammoth-SRNN-test",
+                "--wandb_entity","NILAB_unimore",
+                "--joint","0"
+            ]
+        },
+        {
+            "name": "SRNN perm NMNIST LP",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "kernprof",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "-l", "-v",
+                "${workspaceFolder}/main.py",
+                "--model", "srnn",
+                "--dataset", "perm_nmnist",
+                "--model_config", "default",
+                "--buffer_size", "30",
+                "--notes", "training SRNN su Neuro-MNIST preprocessato con T=30 invertito, no sparsity, buffer_size 30",
+                "--seed","0",
+                "--debug_mode","0",
+                "--wandb_project","mammoth-SRNN-test",
+                "--wandb_entity","NILAB_unimore",
+                "--joint","0"
+            ]
+        },
+        {
+            "name": "SRNN perm NMNIST",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--model", "srnn",
+                "--dataset", "perm_nmnist",
+                "--model_config", "default",
+                "--buffer_size", "30",
+                "--notes", "training SRNN su Neuro-MNIST preprocessato con T=30 invertito, no sparsity, buffer_size 30",
+                "--seed","0",
+                "--debug_mode","0",
+                "--wandb_project","mammoth-SRNN-test",
+                "--wandb_entity","NILAB_unimore",
+                "--joint","0"
+            ]
+        },
+        {
+            "name": "DER smnist",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--model", "der",
+                "--dataset", "seq-mnist",
+                "--model_config", "default",
+                "--buffer_size", "200",
+                "--notes", "training der su MNIST buffer_size 30",
+                "--seed","0",
+                "--debug_mode","0",
+                "--wandb_project","mammoth-SRNN-test",
+                "--wandb_entity","NILAB_unimore",
+                "--joint","0",
+            ]
+        },
+        {
+            "name": "DER pmnist",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--model", "der",
+                "--dataset", "perm-mnist",
+                "--model_config", "default",
+                "--buffer_size", "200",
+                "--notes", "training der su pMNIST buffer_size 200",
+                "--seed","0",
+                "--debug_mode","0",
+                "--wandb_project","mammoth-SRNN-test",
+                "--wandb_entity","NILAB_unimore",
+                "--joint","0",
+            ]
+        }
+    ]
+}

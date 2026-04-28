@@ -12,7 +12,6 @@ checkpoints/
 json/
 out/
 err/
-.vscode/
 *.code-workspace
 .history/
 __pycache__/
