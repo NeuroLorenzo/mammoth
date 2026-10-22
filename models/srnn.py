@@ -11,9 +11,9 @@ from utils.args import ArgumentParser, add_rehearsal_args
 from utils.buffer import Buffer
 import matplotlib.pyplot as plt
 
-class srnn(ContinualModel):
+class srnn_cil(ContinualModel):
     """Continual learning via spiking Recurrent Neural Network"""
-    NAME = 'srnn'
+    NAME = 'srnn-cil'
     COMPATIBILITY = ['class-il', 'domain-il', 'task-il', 'general-continual']
 
     @staticmethod
@@ -25,7 +25,7 @@ class srnn(ContinualModel):
         return parser
 
     def __init__(self, backbone, loss, args, transform, dataset=None):
-        super(srnn, self).__init__(backbone, loss, args, transform, dataset=dataset)
+        super(srnn_cil, self).__init__(backbone, loss, args, transform, dataset=dataset)
         self.buffer = Buffer(self.args.buffer_size)
         self.checkpoint=None
         self.fig, self.ax_list = plt.subplots(2, sharex=True)
@@ -89,12 +89,12 @@ class srnn(ContinualModel):
             for name in self.fish:
                 self.fish[name] /= len(dataset.train_loader)
 
-        if self.print_sparsity:
-            ax = self.ax_list[0]
-            ax.clear()
-            ax.plot(self.net.fire_sparsities)
-            plt.savefig(f'task_{j}_sparsity.png', dpi=300, bbox_inches='tight')
-        print('COMPUTED')
+            # if self.print_sparsity:
+            #     ax = self.ax_list[0]
+            #     ax.clear()
+            #     ax.plot(self.net.fire_sparsities)
+            #     plt.savefig(f'task_{j}_sparsity.png', dpi=300, bbox_inches='tight')
+            # print('COMPUTED')
         
         if self.args.weight_align and (self.current_task > 0): # Non farlo per la prima task
             with torch.no_grad():

@@ -32,3 +32,5 @@ class Sgd(ContinualModel):
         self.opt.step()
 
         return loss.item()
+
+

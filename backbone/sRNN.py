@@ -207,7 +207,9 @@ class BaseSRNN(MammothBackbone):
          
         # Kill self-connections
         self.w_rec.data *= (1 - torch.eye(self.n_rec, device=self.device))
-
+        # feats=resnet(x)
+        # feats_spike=convspikes(feats)
+        # self.integrate_odes(T,feats_spike)
         self.integrate_odes(T,x)
 
         fire_sparsity=torch.count_nonzero(self.z)/(T*B*N)
@@ -403,7 +405,11 @@ class BaseSRNN(MammothBackbone):
             else:
                 self.w_in.grad  += self.lr_layer[0] *g_in
                 self.w_rec.grad += self.lr_layer[1] *g_rec
-                self.w_out.grad +=  self.lr_layer[2] *g_out_chunk
+                if start_id is not None:
+                    self.w_out.grad[start_id:end_id,:]  +=  self.lr_layer[2] *g_out_chunk
+                else:
+                    self.w_out.grad +=  self.lr_layer[2] *g_out_chunk
+                
             
                 
             return err

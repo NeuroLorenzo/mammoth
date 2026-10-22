@@ -2,6 +2,11 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Tuple
 import torch
 from tqdm.auto import tqdm
+import os
+import pickle
+import numpy as np
+import shutil
+from datetime import datetime
 
 if TYPE_CHECKING:
     from models.utils.continual_model import ContinualModel
@@ -48,6 +53,15 @@ def evaluate(model: 'ContinualModel', dataset: 'ContinualDataset', last=False, r
     Returns:
         a tuple of lists, containing the class-il and task-il accuracy for each task. If return_loss is True, the loss is also returned as a third element.
     """
+
+    # Genera il timestamp nel formato: YYYY-MM-DD_HH-MM-SS (es. 2026-07-30_23-55-00)
+    save_path = "debug_logits"
+    
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+        # shutil.rmtree(save_path)
+
+        
     status = model.net.training
     model.net.eval()
     accs, accs_mask_classes = [], []
@@ -59,6 +73,8 @@ def evaluate(model: 'ContinualModel', dataset: 'ContinualDataset', last=False, r
 
     pbar = tqdm(dataset.test_loaders, total=total_len, desc='Evaluating', disable=model.args.non_verbose)
     for k, test_loader in enumerate(dataset.test_loaders):
+        all_outputs=[]
+        all_labels=[]
         if last and k < len(dataset.test_loaders) - 1:
             continue
         correct, correct_mask_classes, total = 0.0, 0.0, 0.0
@@ -81,7 +97,7 @@ def evaluate(model: 'ContinualModel', dataset: 'ContinualDataset', last=False, r
                     outputs = model.future_forward(inputs)
                 else:
                     outputs = model(inputs)
-                    # print('labels:',labels)
+                    # print ('labels:',labels)
 
             if return_loss:
                 loss = loss_fn(outputs, labels)
@@ -94,14 +110,16 @@ def evaluate(model: 'ContinualModel', dataset: 'ContinualDataset', last=False, r
             pbar.set_postfix({f'acc_task_{k+1}': max(0, correct / total * 100)}, refresh=False)
             pbar.set_description(f"Evaluating Task {k+1}", refresh=False)
             pbar.update(1)
-
+            all_outputs.append(outputs.detach().cpu().numpy())
+            all_labels.append(labels.detach().cpu().numpy())
+            
             if dataset.SETTING == 'class-il':
                 mask_classes(outputs, dataset, k)
                 _, pred = torch.max(outputs.data, 1)
                 correct_mask_classes += torch.sum(pred == labels).item()
 
         tot_seen_samples += total
-
+        
         if correct > correct_mask_classes and dataset.SETTING == 'class-il':
             logging.warning("Task-IL accuracy is LOWER than Class-IL accuracy. "
                             "This should NEVER happen and probably means there is a bug somewhere. "
@@ -109,6 +127,21 @@ def evaluate(model: 'ContinualModel', dataset: 'ContinualDataset', last=False, r
         accs.append(correct / total * 100
                     if 'class-il' in model.COMPATIBILITY or 'general-continual' in model.COMPATIBILITY else 0)
         accs_mask_classes.append(correct_mask_classes / total * 100)
+        filename = f"{save_path}/task_{n_classes}_eval_{k}_logits.pkl"
+        with open(filename, 'ab') as f:
+            data_to_save = {
+                'logits': np.concatenate(all_outputs),
+                'labels': np.concatenate(all_labels),
+            }
+            pickle.dump(data_to_save, f)
+    # Salviamo un file per ogni task (k) per non fare confusione
+    filename = f"{save_path}/task_{n_classes}_eval.pkl"
+    with open(filename, 'ab') as f:
+        data_to_save = {
+            f'accs':accs,
+            f'accs_mask_classes':accs_mask_classes,
+        }
+        pickle.dump(data_to_save, f)
     pbar.close()
 
     model.net.train(status)

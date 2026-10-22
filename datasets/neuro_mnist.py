@@ -220,7 +220,7 @@ class NeuromorphicMNIST(ContinualDataset):
 
     @set_default_from_args("backbone")
     def get_backbone():
-        return "srnn_spiking"
+        return "srnn_spiking_cil"
 
     @staticmethod
     def get_transform():

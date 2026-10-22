@@ -2,22 +2,22 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Mammoth Main",
+            "name": "Srnn seq-nmnist",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--model", "srnn",
+                "--model", "srnn-cil",
                 "--dataset", "neuro-mnist",
                 "--model_config", "default",
                 "--buffer_size", "30",
                 "--notes", "training SRNN su Neuro-MNIST preprocessato con T=30 invertito, no sparsity, buffer_size 30",
                 "--seed","0",
                 "--debug_mode","0",
-                "--wandb_project","mammoth-SRNN-test",
-                "--wandb_entity","NILAB_unimore",
+                // "--wandb_project","mammoth-SRNN-test",
+                // "--wandb_entity","NILAB_unimore",
                 "--joint","0"
             ]
         },
@@ -102,6 +102,81 @@
                 "--wandb_entity","NILAB_unimore",
                 "--joint","0",
             ]
-        }
+        },
+        {
+            "name": "RESNET sCIFAR10",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "python": "/home/lorenzo_24_04/anaconda3/envs/mammoth_env/bin/python",
+            "args": [
+                "--model", "sgd_snn",
+                "--dataset", "seq-cifar10",
+                "--backbone","resnet18cus",
+                "--model_config", "default",
+                "--buffer_size", "1000",
+                "--notes", "training RESNET on SCIFAR10",
+                "--seed","0",
+                "--debug_mode","0",
+                // "--joint","1",
+                // "--savecheck","last",
+                // "--ckpt_name",    "resnet18_scifar10",
+                // "--loadcheck" ,"checkpoints/resnet18_scifar10_sgd_joint_inference.pt",
+                // "--inference_only","1",
+            ]
+        },
+        {
+            "name": "RESNET sCIFAR10_feats",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "python": "/home/lorenzo_24_04/anaconda3/envs/mammoth_env/bin/python",
+            "args": [
+                "--model", "sgd_snn",
+                "--dataset", "seq-cifar10-feats",
+                "--backbone","resnet18cus",
+                "--model_config", "default",
+                "--buffer_size", "1000",
+                "--notes", "training RESNET on SCIFAR10-feats",
+                "--seed","0",
+                "--debug_mode","0",
+                "--joint","0",
+               
+                // "--savecheck","last",
+                // "--ckpt_name",    "resnet18_scifar10",
+                // "--loadcheck" ,"checkpoints/resnet18_scifar10_sgd_joint_inference.pt",
+                // "--inference_only","1",
+            ]
+        },
+        {
+            "name": "RESNET",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--model", "sgd",
+                "--dataset", "seq-cifar10",
+                "--backbone","resnet18",
+                "--model_config", "default",
+                // "--buffer_size", "1",
+                "--notes", "training RESNET on SCIFAR10",
+                "--seed","0",
+                "--debug_mode","0",
+                // "--joint","1",
+                // "--savecheck","last",
+                // "--ckpt_name",    "resnet18_scifar10",
+                "--loadcheck" ,"checkpoints/resnet18_scifar10_weights_only.pt",
+                // "--loadcheck" ,"checkpoints/resnet18_scifar10_sgd_joint_inference.pt",
+                // "--inference_only","1",
+                ">", "${workspaceFolder}/output_resnet.txt"
+            ]
+        },
+        
     ]
 }
