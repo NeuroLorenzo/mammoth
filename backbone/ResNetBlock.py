@@ -421,6 +421,8 @@ class RESNETCUS(ResNet):
         # load pretrained weights if provided
         if net_state is not None:
             self._load_net_state(net_state)
+        else:
+            print('------------------------[RESNETCUS] No pretrained weights provided. Initializing randomly.-------------------------')
 
         self.load_traces=False
 
@@ -573,7 +575,7 @@ class RESNETCUS(ResNet):
             )
         
     @profile
-    @torch.no_grad()
+    # @torch.no_grad()
     def apply_homeostasis(self):
         eps=1e-8
         self.w_in.data*=self.target_w_in.to(self.w_in.device)/(self.w_in.norm(p=1,dim=1,keepdim=True)+ eps)
@@ -588,6 +590,7 @@ class RESNETCUS(ResNet):
         self.mask_in = self.mask_in.to(self.w_in.device)
         self.mask_rec = self.mask_rec.to(self.w_rec.device)
         self.mask_out = self.mask_out.to(self.w_out.device)
+        # with torch.set_grad_enabled(self.net_state is None):
         with torch.no_grad():
             self.w_in *= self.mask_in
             self.w_rec *= self.mask_rec
@@ -648,8 +651,10 @@ class RESNETCUS(ResNet):
         Returns:
             output tensor (output_classes)
         """
-        self.apply(self.freeze_bn)
-        with torch.no_grad():
+        if self.net_state is not None:
+            self.apply(self.freeze_bn)
+        # with torch.no_grad():
+        with torch.set_grad_enabled(self.net_state is None):
             if x.shape[1] != 512:
                 if returnt == "feats_only":
                     spikes=x
@@ -871,9 +876,10 @@ class RESNETCUS(ResNet):
                 
     @profile
     def grads_batch(self, x, yo, yt,start_id,end_id,loss=None,penalties=None,fr_reg=False,use_metapl=False,logit_reg=False,log_data_flag=False):   
-        self.apply(self.freeze_bn)
-        with torch.no_grad():
-            
+        if self.net_state is not None:
+            self.apply(self.freeze_bn)
+        # with torch.no_grad():
+        with torch.set_grad_enabled(self.net_state is None):
             # Surrogate derivatives
             h = self.gamma*torch.max(torch.zeros_like(self.v), 1-torch.abs((self.v-self.thr)/self.thr))
             B,T,_=x.shape

@@ -322,7 +322,15 @@ class Sgd_snn(ContinualModel):
             self.opt.step()
             
             # Compute loss only for logging
-            loss = self.loss(outputs, targets) # computing the loss on the whole outputs instead of only the current ones
+
+
+            # outputs_bc = outputs.permute(1, 0, 2)
+            # spike_counts = outputs_bc.sum(dim=2)
+            # loss = self.loss(spike_counts, labels) # computing the loss on the whole outputs instead of only the current ones
+            mean_probs = outputs.mean(dim=0)
+            log_probs = torch.log(mean_probs + 1e-8)
+            loss = self.loss(log_probs, labels)
+            # loss = self.loss(outputs, targets) # computing the loss on the whole outputs instead of only the current ones
             self.losses.append(loss.item())
             
 

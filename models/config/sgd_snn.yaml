@@ -1,15 +1,17 @@
 
 default:
-  #optimizer: sgd
+  # optimizer: sgd
   optimizer: adam
   lr: 0.001
-  batch_size: 128
-  n_epochs: 50            # epoche per task
-  # optim_mom: 0.9
-  # optim_wd: 5e-4
-  # optim_nesterov: False
+  # lr: 0.001
+  batch_size: 16
+  n_epochs: 1            # epoche per task
+  #optim_mom: 0.9
+  #optim_wd: 5e-4
+  #optim_nesterov: False
   seed: 42
   #validation: 0.1           # frazione val set (0 = usa test)
+  validation: 0
   nowand: 1             # 1 = disabilita Weights & Biases
   # csv_log: True          # salva risultati in CSV
   # verbose: True
@@ -18,12 +20,9 @@ default:
   dataset_config: default
 
   trasform: None
+
   # Continual learning From NEST
   alpha: 0.1
-  lr: 0.001
-  # n_epochs: 30
-  n_epochs: 1
-  batch_size: 16
 
   # SRNN architecture
   n_in: 512
@@ -64,9 +63,11 @@ default:
   # xi: 0.01
   xi: 20
   meta_func: 'exp'
-  # net_state: 
+  #net_state: 
+  # net_state: "./checkpoints/sgd_seq-cifar10_default_0_50_20261029-232531_0fd55c30_joint.pt"
   net_state: "./checkpoints/resnet18_scifar10_sgd_joint_inference.pt"
-  pn_featbuff: 0.50
-  pt_featbuff: 0.5
-  use_buff: true
-  # buffer_size: 1000
+  pn_featbuff: 0.0
+  pt_featbuff: 0.0
+  use_buff: false
+  #use_buff: true
+  buffer_size: 1000

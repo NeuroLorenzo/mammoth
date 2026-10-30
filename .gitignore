@@ -103,7 +103,7 @@ scripts/prepare_grid*
 *.lprof
 *.zip
 docs/model_args
-
+images/*
 cache
 
 uv.lock

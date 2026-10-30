@@ -138,7 +138,8 @@ class SequentialCIFAR10(ContinualDataset):
 
     @staticmethod
     def get_loss():
-        return F.cross_entropy
+        return torch.nn.NLLLoss()
+        # return F.cross_entropy
 
     @staticmethod
     def get_normalization_transform():

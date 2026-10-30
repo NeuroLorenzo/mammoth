@@ -28,7 +28,6 @@ class MyCIFAR10_feats(Dataset):
 
         loaded = np.load(file_path)
         
-        # Manteniamo array NumPy float32 e int64
         self.data = loaded["features"].astype(np.float32)
         self.targets = loaded["labels"].astype(np.int64)
 
@@ -85,7 +84,8 @@ class SequentialCIFAR10Feats(ContinualDataset):
 
     @staticmethod
     def get_loss():
-        return nn.CrossEntropyLoss()
+        # return nn.CrossEntropyLoss()
+        return torch.nn.NLLLoss()
 
     @staticmethod
     def get_backbone():
