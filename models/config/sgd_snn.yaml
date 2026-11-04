@@ -2,7 +2,7 @@
 default:
   # optimizer: sgd
   optimizer: adam
-  lr: 0.001
+  lr: 1e-5
   # lr: 0.001
   batch_size: 16
   n_epochs: 1            # epoche per task
@@ -41,8 +41,8 @@ default:
   syn_scale: False
   sparsity: [0.0,0.0,0.0]
   # sparsity: [0.75,0.99,0.0]
-  #lr_layer: [0.005,0.005,0.005]
-  lr_layer: [0.5,0.5,0.5] 
+  lr_layer: [0.05,0.05,0.05]
+  # lr_layer: [0.5,0.5,0.5] 
   f_target: 1
   
   c_reg: 0.001
@@ -60,14 +60,15 @@ default:
 
   filter_most_active: false
   n_active_filter: 1
+  # xi: 0.00001
   # xi: 0.01
   xi: 20
   meta_func: 'exp'
   #net_state: 
   # net_state: "./checkpoints/sgd_seq-cifar10_default_0_50_20261029-232531_0fd55c30_joint.pt"
   net_state: "./checkpoints/resnet18_scifar10_sgd_joint_inference.pt"
-  pn_featbuff: 0.0
-  pt_featbuff: 0.0
-  use_buff: false
+  pn_featbuff: 1.0
+  pt_featbuff: 0.2
+  use_buff: true
   #use_buff: true
   buffer_size: 1000

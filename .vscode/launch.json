@@ -121,7 +121,7 @@
                 "--notes", "training RESNET on SCIFAR10",
                 "--seed","0",
                 "--debug_mode","0",
-                "--joint","1",
+                "--joint","0",
                 // "--savecheck","last",
                 // "--ckpt_name",    "resnet18_scifar10",
                 // "--loadcheck" ,"checkpoints/resnet18_scifar10_sgd_joint_inference.pt",
@@ -145,7 +145,7 @@
                 "--notes", "training RESNET on SCIFAR10-feats",
                 "--seed","0",
                 "--debug_mode","0",
-                "--joint","1",
+                "--joint","0",
                
                 // "--savecheck","last",
                 // "--ckpt_name",    "resnet18_scifar10",
